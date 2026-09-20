@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QUrl
@@ -22,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from .. import APP_NAME, __version__
 from ..config import Settings
-from ..deliver import usb
+from ..deliver import email, usb
 from ..source import auth
 from ..source.mangalib import SITE_NAMES
 from . import theme
@@ -33,7 +34,8 @@ FORMATS = [("PDF — для USB", "pdf"), ("AZW3 — обложка на пол�
            ("EPUB — для почты", "epub"), ("CBZ — архив", "cbz")]
 DIRECTIONS = [("← справа налево (манга)", "rtl"), ("→ слева направо (манхва)", "ltr")]
 SPREADS = [("Разрезать", "split"), ("Повернуть", "rotate"), ("Оставить", "keep")]
-DESTINATIONS = [("Сразу на Kindle", True), ("В папку", False)]
+DESTINATIONS = [("Сразу на Kindle", "kindle"), ("В папку", "folder"),
+                ("Письмом на Kindle", "email")]
 
 
 class MainWindow(QMainWindow):
@@ -56,11 +58,14 @@ class MainWindow(QMainWindow):
     # --- сборка интерфейса ----------------------------------------------
 
     def _set_icon(self) -> None:
-        for size in (256, 128, 48):
-            path = Path(__file__).resolve().parents[3] / "assets" / "icons" / f"mangakindle-{size}.png"
-            if path.exists():
-                self.setWindowIcon(QIcon(str(path)))
-                return
+        # в сборке PyInstaller иконки лежат рядом с распакованным бандлом
+        roots = [Path(getattr(sys, "_MEIPASS", "")), Path(__file__).resolve().parents[3]]
+        for root in roots:
+            for size in (256, 128, 48):
+                path = root / "assets" / "icons" / f"mangakindle-{size}.png"
+                if path.is_file():
+                    self.setWindowIcon(QIcon(str(path)))
+                    return
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -172,7 +177,8 @@ class MainWindow(QMainWindow):
         self.format_box = self._combo(FORMATS, self.settings.output_format)
         self.direction_box = self._combo(DIRECTIONS, self.settings.direction)
         self.spread_box = self._combo(SPREADS, self.settings.spread)
-        self.destination_box = self._combo(DESTINATIONS, True)
+        self.destination_box = self._combo(DESTINATIONS, "kindle")
+        self.destination_box.currentIndexChanged.connect(self._on_destination_changed)
         for widget in (self.format_box, self.direction_box, self.spread_box, self.destination_box):
             widget.setFont(theme.body_font(9))
             row.addWidget(widget, stretch=1)
@@ -183,6 +189,12 @@ class MainWindow(QMainWindow):
         self.kindle_hint.setFont(theme.body_font(9))
         hint_row.addWidget(self.kindle_hint)
         hint_row.addStretch(1)
+
+        self.mail_button = PixelButton("Почта…")
+        self.mail_button.setFixedWidth(88)
+        self.mail_button.setToolTip("Настройки Send to Kindle")
+        self.mail_button.clicked.connect(self.setup_email)
+        hint_row.addWidget(self.mail_button)
 
         token_button = PixelButton("Токен 18+")
         token_button.setFixedWidth(100)
@@ -350,6 +362,21 @@ class MainWindow(QMainWindow):
             and self.chapter_list.item(index).checkState() == Qt.Checked
         ]
 
+    def setup_email(self) -> None:
+        from .dialogs import EmailDialog
+
+        dialog = EmailDialog(self.settings, self)
+        if dialog.exec():
+            self._say(f"Почта настроена: {self.settings.kindle_email}", theme.OK)
+
+    def _on_destination_changed(self) -> None:
+        if self.destination_box.currentData() != "email":
+            return
+        try:
+            email.check_settings(self.settings)
+        except email.MailError:
+            self._say("Почта ещё не настроена — жми «Почта…»", theme.MUTED)
+
     def ask_token(self) -> None:
         token, ok = QInputDialog.getText(
             self, "Токен mangalib", auth.HOW_TO.split("\n\nДальше")[0]
@@ -374,6 +401,17 @@ class MainWindow(QMainWindow):
         self.settings.output_format = self.format_box.currentData()
         self.settings.direction = self.direction_box.currentData()
         self.settings.spread = self.spread_box.currentData()
+
+        destination = self.destination_box.currentData()
+        if destination == "email":
+            try:
+                email.check_settings(self.settings)
+            except email.MailError as exc:
+                self._say(str(exc), theme.ERROR)
+                return
+            self.settings.max_part_bytes = email.limit_bytes(self.settings)
+        else:
+            self.settings.max_part_bytes = 0
         self.settings.save()
 
         value = self.link.text().strip()
@@ -384,7 +422,7 @@ class MainWindow(QMainWindow):
             manga=self.manga,
             chapters=chapters,
             settings=self.settings,
-            to_kindle=bool(self.destination_box.currentData()),
+            destination=self.destination_box.currentData(),
             eject=False,
         )
         self.progress.set_value(0)

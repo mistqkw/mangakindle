@@ -15,7 +15,7 @@ mangakindle = "mangakindle.cli:main"
 mangakindle-gui = "mangakindle.gui.app:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "pyinstaller>=6.10"]
 
 [build-system]
 requires = ["hatchling"]

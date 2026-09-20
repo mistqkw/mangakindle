@@ -87,6 +87,12 @@ def main(target: str | None = None) -> int:
     for size in SIZES:
         scaled(size).save(out / f"mangakindle-{size}.png")
     (out / "mangakindle.svg").write_text(svg(), encoding="utf-8")
+    # .ico для Windows-сборки
+    scaled(256).save(
+        out / "mangakindle.ico",
+        format="ICO",
+        sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+    )
     print(f"Иконки готовы: {out}")
     return 0
 

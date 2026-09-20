@@ -153,3 +153,38 @@ def test_missing_cover_does_not_break_the_build(tmp_path, monkeypatch):
     manga = MangaInfo(slug="1--x", name="Бродяга", cover_url="https://example/cover.jpg")
     result = pipeline.build(_NoCover(), manga, _chapters(), _settings(tmp_path))
     assert result.files and result.pages == 4
+
+
+def test_big_volume_is_split_into_parts_for_email(tmp_path, monkeypatch):
+    from mangakindle import pipeline
+    from mangakindle.source.models import MangaInfo
+
+    monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
+    manga = MangaInfo(slug="1--x", name="Бродяга")
+    # предел меньше одной страницы -> каждая страница уезжает в свою часть
+    settings = _settings(tmp_path, max_part_bytes=1)
+
+    result = pipeline.build(_FakeSource(), manga, _chapters(), settings)
+
+    assert [f.name for f in result.files] == [
+        "Бродяга — гл1-2 часть 1.pdf",
+        "Бродяга — гл1-2 часть 2.pdf",
+        "Бродяга — гл1-2 часть 3.pdf",
+        "Бродяга — гл1-2 часть 4.pdf",
+    ]
+    assert result.pages == 4
+
+
+def test_single_part_keeps_the_plain_name(tmp_path, monkeypatch):
+    from mangakindle import pipeline
+    from mangakindle.source.models import MangaInfo
+
+    monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
+    settings = _settings(tmp_path, max_part_bytes=50 * 1024 * 1024)
+
+    result = pipeline.build(
+        _FakeSource(), MangaInfo(slug="1--x", name="Бродяга"), _chapters(), settings
+    )
+
+    assert [f.name for f in result.files] == ["Бродяга — гл1-2.pdf"]
+    assert not list(tmp_path.glob("*часть*"))

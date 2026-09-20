@@ -72,8 +72,7 @@ def build(
     for group in groups:
         if cancelled():
             raise Cancelled
-        builder = _make_builder(settings, manga, group, cover)
-        page_number = 0
+        part = _Part(settings, manga, group, cover)
 
         for chapter in group:
             if cancelled():
@@ -85,7 +84,7 @@ def build(
                 continue
 
             progress(f"Скачиваю {chapter.label}", 0, len(urls))
-            first_page_of_chapter = True
+            pending_title = chapter.label
             for index, url in enumerate(urls, start=1):
                 if cancelled():
                     raise Cancelled
@@ -96,22 +95,20 @@ def build(
                     continue
 
                 for image in prepare_page(data, options):
-                    # закладка и пункт оглавления — на первой странице каждой главы
-                    title = chapter.label if first_page_of_chapter else ""
-                    first_page_of_chapter = False
-                    _add_page(builder, encode_jpeg(image, options.quality), image, title)
-                    page_number += 1
+                    jpeg = encode_jpeg(image, options.quality)
+                    # письмо не резиновое: начинаем новую часть, не дожидаясь конца
+                    if part.would_overflow(len(jpeg)):
+                        part.flush()
+                        pending_title = chapter.label
+                    part.add(jpeg, image, pending_title)
+                    pending_title = ""
                 progress(f"Скачиваю {chapter.label}", index, len(urls))
 
-        if page_number == 0:
-            continue
-        path = settings.output_dir / _filename(manga, group, settings.output_format)
-        progress(f"Собираю {path.name}", 0, 1)
-        _write(builder, path, settings)
-        progress(f"Собираю {path.name}", 1, 1)
-        files.append(path)
-        # обложка тоже лист в готовом файле, считаем её
-        total_pages += page_number + (1 if cover is not None else 0)
+        progress("Собираю файл", 0, 1)
+        written = part.finish()
+        progress("Собираю файл", 1, 1)
+        files += written
+        total_pages += part.total_pages
 
         if not settings.keep_cache:
             _clear_cache(manga, group)
@@ -124,6 +121,67 @@ def build(
 
 
 # --- внутренности -------------------------------------------------------
+
+
+class _Part:
+    """Один выходной файл. Если задан предел размера — режет его на части."""
+
+    def __init__(self, settings: Settings, manga: MangaInfo, group, cover) -> None:
+        self.settings = settings
+        self.manga = manga
+        self.group = group
+        self.cover = cover
+        self.total_pages = 0
+        self.written: list[Path] = []
+        self._pages_in_part = 0
+        self._bytes = 0
+        self._builder = None
+
+    # --- наполнение ---
+
+    def _ensure_builder(self):
+        if self._builder is None:
+            self._builder = _make_builder(self.settings, self.manga, self.group, self.cover)
+            self._bytes = 0
+            self._pages_in_part = 0
+            if self.cover is not None:
+                self.total_pages += 1
+        return self._builder
+
+    def would_overflow(self, size: int) -> bool:
+        limit = self.settings.max_part_bytes
+        return bool(limit) and self._pages_in_part > 0 and self._bytes + size > limit
+
+    def add(self, jpeg: bytes, image, chapter_title: str) -> None:
+        _add_page(self._ensure_builder(), jpeg, image, chapter_title)
+        self._bytes += len(jpeg)
+        self._pages_in_part += 1
+        self.total_pages += 1
+
+    # --- запись ---
+
+    def flush(self) -> None:
+        if self._builder is None or self._pages_in_part == 0:
+            return
+        number = len(self.written) + 1
+        path = self.settings.output_dir / _filename(
+            self.manga, self.group, self.settings.output_format, part=number
+        )
+        _write(self._builder, path, self.settings)
+        self.written.append(path)
+        self._builder = None
+
+    def finish(self) -> list[Path]:
+        self.flush()
+        if len(self.written) == 1:
+            # частей не понадобилось — возвращаем имя без «часть 1»
+            plain = self.settings.output_dir / _filename(
+                self.manga, self.group, self.settings.output_format
+            )
+            if plain != self.written[0]:
+                self.written[0].replace(plain)
+                self.written[0] = plain
+        return self.written
 
 
 def _make_builder(settings: Settings, manga: MangaInfo, group: list[ChapterRef], cover):
@@ -212,12 +270,14 @@ def _fetch_cover(source, manga: MangaInfo, options: PageOptions):
         return None
 
 
-def _filename(manga: MangaInfo, group: list[ChapterRef], fmt: str) -> str:
+def _filename(manga: MangaInfo, group: list[ChapterRef], fmt: str, part: int | None = None) -> str:
     name = _safe(manga.title)
     if len(group) == 1:
         tail = f"т{group[0].volume} гл{group[0].number}"
     else:
         tail = f"гл{group[0].number}-{group[-1].number}"
+    if part:
+        tail += f" часть {part}"
     return f"{name} — {tail}.{fmt}"
 
 

@@ -1,0 +1,26 @@
+name: Тесты
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Поставить uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Зависимости
+        run: uv sync --group dev
+
+      - name: Тесты
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: uv run --group dev pytest -q

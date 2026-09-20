@@ -12,7 +12,7 @@ from pathlib import Path
 from . import APP_NAME, __version__
 from .config import Settings
 from .convert import azw3
-from .deliver import usb
+from .deliver import email, usb
 from .pipeline import Cancelled, build
 from .source import auth
 from .source.local import LocalSource
@@ -34,6 +34,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.forget_token:
         print("Токен удалён." if auth.clear_token() else "Токена и не было.")
         return 0
+    if args.setup_email:
+        return _setup_email()
 
     if not args.url and not args.local:
         if sys.stdin.isatty() and sys.stdout.isatty():
@@ -44,13 +46,17 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.load()
     if args.out:
         settings.output_dir = Path(args.out).expanduser()
-    settings.output_format = args.format
+    # по почте Amazon сам конвертирует EPUB, поэтому для неё это разумный
+    # выбор по умолчанию; явный --format всегда сильнее
+    settings.output_format = args.format or ("epub" if args.to == "email" else "pdf")
     settings.direction = args.direction
     settings.spread = args.spread
     settings.trim = not args.no_trim
     settings.per_chapter = args.split
     settings.keep_cache = args.keep_cache
     settings.cover = not args.no_cover
+    if args.to == "email":
+        settings.max_part_bytes = email.limit_bytes(settings)
     settings.jpeg_quality = args.quality
     settings.delay = args.delay
 
@@ -62,10 +68,8 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\nОтменено.")
         return 130
-    except auth.AuthError as exc:
-        print(f"\n{exc}", file=sys.stderr)
-        return 2
-    except SourceError as exc:
+    except (email.MailError, auth.AuthError, SourceError) as exc:
+        sys.stdout.flush()
         print(f"\n{exc}", file=sys.stderr)
         return 2
 
@@ -107,6 +111,8 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         target = "по файлу на главу" if settings.per_chapter else "одним файлом"
         print(f"Беру {len(selected)} гл. {target}, формат {settings.output_format}, "
               f"направление {settings.direction}, разворот: {settings.spread}, {where}")
+        if args.to == "email":
+            email.check_settings(settings)  # до скачивания, а не после
         warning = _size_warning(selected, settings)
         if warning:
             print(warning)
@@ -121,6 +127,8 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
 
     if args.to == "kindle":
         _send_to_kindle(result.files, eject_after=args.eject)
+    elif args.to == "email":
+        _send_by_email(result.files, settings)
     if result.skipped:
         print(f"Пропущено: {len(result.skipped)}")
         for line in result.skipped[:5]:
@@ -183,6 +191,47 @@ def _send_to_kindle(files: list[Path], eject_after: bool = False) -> None:
     except usb.KindleError as exc:
         print(f"\n{exc}", file=sys.stderr)
         print("Файлы остались в папке, отправишь позже.", file=sys.stderr)
+
+
+def _send_by_email(files: list[Path], settings: Settings) -> None:
+    sys.stdout.flush()
+    try:
+        sent = email.send(files, settings)
+        print(f"\nОтправлено на {settings.kindle_email}: {', '.join(sent)}")
+        print("Amazon сконвертирует сам — книга появится на устройстве через пару минут.")
+    except email.MailError as exc:
+        print(f"\n{exc}", file=sys.stderr)
+        print("Файлы остались в папке, отправишь позже.", file=sys.stderr)
+
+
+def _setup_email() -> int:
+    """Спрашивает настройки почты. Пароль уходит в keyring, не в конфиг."""
+    import getpass
+
+    settings = Settings.load()
+    print("Настройка отправки на Kindle письмом.\n")
+    print("Адрес отправителя должен быть в списке разрешённых в аккаунте Amazon:")
+    print("Личные документы -> Список адресов e-mail для отправки.\n")
+
+    def ask(label: str, current: str) -> str:
+        suffix = f" [{current}]" if current else ""
+        value = input(f"{label}{suffix}: ").strip()
+        return value or current
+
+    settings.kindle_email = ask("Адрес Kindle (...@kindle.com)", settings.kindle_email)
+    settings.smtp_host = ask("SMTP-сервер", settings.smtp_host or "smtp.gmail.com")
+    port = ask("Порт", str(settings.smtp_port or 587))
+    settings.smtp_port = int(port) if port.isdigit() else 587
+    settings.smtp_user = ask("Логин (твой почтовый адрес)", settings.smtp_user)
+
+    password = getpass.getpass("Пароль приложения (не показывается): ").strip()
+    if password:
+        email.save_password(settings.smtp_user, password)
+    settings.save()
+
+    print("\nСохранено. Пароль лежит в системном хранилище, в конфиге его нет.")
+    print("Для Gmail нужен именно пароль приложения, обычный не подойдёт.")
+    return 0
 
 
 def _put_cover_on_shelf(kindle, path: Path):
@@ -288,11 +337,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--list", action="store_true", help="показать список глав и выйти")
     parser.add_argument("--split", action="store_true",
                         help="каждая глава отдельным файлом (по умолчанию — один файл на выбор)")
-    parser.add_argument("--to", choices=("folder", "kindle"), default="folder",
-                        help="folder — сохранить в папку, kindle — сразу на устройство по USB")
+    parser.add_argument("--to", choices=("folder", "kindle", "email"), default="folder",
+                        help="folder — в папку, kindle — по USB, email — письмом на Kindle")
     parser.add_argument("--eject", action="store_true",
                         help="отмонтировать Kindle после копирования")
-    parser.add_argument("--format", choices=("pdf", "azw3", "epub", "cbz"), default="pdf",
+    parser.add_argument("--format", choices=("pdf", "azw3", "epub", "cbz"), default=None,
                         help="pdf — для USB, azw3 — для USB с обложкой на полке "
                              "(нужен calibre), epub — для отправки по почте")
     parser.add_argument("--direction", choices=("rtl", "ltr"), default="rtl")
@@ -304,6 +353,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--keep-cache", action="store_true", help="не удалять скачанные страницы")
     parser.add_argument("--quality", type=int, default=85, help="качество JPEG, по умолчанию 85")
     parser.add_argument("--delay", type=float, default=0.7, help="пауза между запросами, сек")
+    parser.add_argument("--setup-email", action="store_true",
+                        help="настроить отправку письмом на Kindle")
     parser.add_argument("--token", help="сохранить свой токен mangalib для раздела 18+")
     parser.add_argument("--token-help", action="store_true",
                         help="как достать свой токен из браузера")

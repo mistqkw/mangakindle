@@ -44,6 +44,7 @@ class Settings:
     per_chapter: bool = False           # True — каждая глава отдельным файлом
     keep_cache: bool = False
     cover: bool = True                  # первой страницей — обложка с сайта
+    max_part_bytes: int = 0             # 0 — не резать файл на части
 
     # обработка страниц
     direction: str = "rtl"              # rtl (манга) | ltr (манхва)
@@ -59,6 +60,7 @@ class Settings:
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
+    max_email_mb: int = 24              # Gmail режет письма на 25 МБ
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Settings":
@@ -101,6 +103,6 @@ class Settings:
             out.append(f"{name} = {val(getattr(self, name))}")
         out += ["", "[network]", f"delay = {val(self.delay)}"]
         out += ["", "[kindle]"]
-        for name in ("kindle_email", "smtp_host", "smtp_port", "smtp_user"):
+        for name in ("kindle_email", "smtp_host", "smtp_port", "smtp_user", "max_email_mb"):
             out.append(f"{name} = {val(getattr(self, name))}")
         return "\n".join(out) + "\n"

@@ -13,7 +13,7 @@ from PySide6.QtCore import QThread, Signal
 
 from ..config import Settings
 from ..convert import azw3
-from ..deliver import usb
+from ..deliver import email, usb
 from ..pipeline import BuildResult, Cancelled, build
 from ..source import auth
 from ..source.local import LocalSource
@@ -72,7 +72,7 @@ class Job:
     manga: MangaInfo
     chapters: list[ChapterRef]
     settings: Settings
-    to_kindle: bool = False
+    destination: str = "folder"   # folder | kindle | email
     eject: bool = False
     extra: dict = field(default_factory=dict)
 
@@ -119,7 +119,9 @@ class BuildWorker(QThread):
     # --- доставка -------------------------------------------------------
 
     def _deliver(self, result: BuildResult) -> str:
-        if not self.job.to_kindle:
+        if self.job.destination == "email":
+            return self._send_mail(result)
+        if self.job.destination != "kindle":
             return ""
         self.progress.emit("Отправляю на Kindle", 0, 1)
         try:
@@ -140,6 +142,18 @@ class BuildWorker(QThread):
             return f"На Kindle: {', '.join(names)}. Запись сброшена, можно отключать."
         except usb.KindleError as exc:
             return f"{exc}\nФайлы остались в папке."
+
+    def _send_mail(self, result: BuildResult) -> str:
+        self.progress.emit("Отправляю письмо", 0, 1)
+        try:
+            sent = email.send(list(result.files), self.job.settings)
+        except email.MailError as exc:
+            return f"{exc}\nФайлы остались в папке."
+        self.progress.emit("Отправляю письмо", 1, 1)
+        return (
+            f"Отправлено на {self.job.settings.kindle_email}: {', '.join(sent)}.\n"
+            "Amazon сконвертирует сам, книга появится через пару минут."
+        )
 
     @staticmethod
     def _put_cover_on_shelf(kindle, path: Path) -> None:
