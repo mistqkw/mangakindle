@@ -16,6 +16,7 @@ class MangaInfo:
     cover_url: str | None = None
     author: str = ""
     year: str = ""
+    site: int = 1          # 1 — обычный раздел, 4 — закрытый 18+
 
     @property
     def title(self) -> str:

@@ -14,6 +14,7 @@ from .config import Settings
 from .convert import azw3
 from .deliver import usb
 from .pipeline import Cancelled, build
+from .source import auth
 from .source.local import LocalSource
 from .source.mangalib import MangaLib, parse_link
 from .source.models import ChapterRef, SourceError
@@ -22,6 +23,17 @@ from .source.models import ChapterRef, SourceError
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    if args.token_help:
+        print(auth.HOW_TO)
+        return 0
+    if args.token:
+        auth.save_token(args.token)
+        print("Токен сохранён в системном хранилище. 18+ раздел теперь открыт.")
+        return 0
+    if args.forget_token:
+        print("Токен удалён." if auth.clear_token() else "Токена и не было.")
+        return 0
 
     if not args.url and not args.local:
         if sys.stdin.isatty() and sys.stdout.isatty():
@@ -50,6 +62,9 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\nОтменено.")
         return 130
+    except auth.AuthError as exc:
+        print(f"\n{exc}", file=sys.stderr)
+        return 2
     except SourceError as exc:
         print(f"\n{exc}", file=sys.stderr)
         return 2
@@ -64,7 +79,11 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         chapters = source.chapters()
     else:
         target = parse_link(args.url)
-        source = MangaLib(delay=settings.delay)
+        source = MangaLib(
+            delay=settings.delay,
+            token=auth.load_token(),
+            site_id=target.site_id,
+        )
         manga = source.manga(target.slug)
         chapters = source.chapters(target.slug)
         if target.is_chapter and not wanted:
@@ -276,5 +295,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--keep-cache", action="store_true", help="не удалять скачанные страницы")
     parser.add_argument("--quality", type=int, default=85, help="качество JPEG, по умолчанию 85")
     parser.add_argument("--delay", type=float, default=0.7, help="пауза между запросами, сек")
+    parser.add_argument("--token", help="сохранить свой токен mangalib для раздела 18+")
+    parser.add_argument("--token-help", action="store_true",
+                        help="как достать свой токен из браузера")
+    parser.add_argument("--forget-token", action="store_true", help="удалить сохранённый токен")
     parser.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
     return parser

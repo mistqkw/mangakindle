@@ -19,7 +19,20 @@ from .models import ChapterRef, MangaInfo, SourceError
 # Один и тот же API живёт на двух хостах, и любой из них может начать
 # отвечать 403 целиком, независимо от тайтла. Поэтому ходим по списку.
 API_HOSTS = ("https://api2.mangalib.me/api", "https://api.cdnlibs.org/api")
-SITE_ID = "1"  # 1 = MangaLib
+# Разделы одной и той же библиотеки. Страницы закрытого раздела сайт
+# отдаёт только своему аккаунту, поэтому туда нужен токен.
+SITE_MANGA = 1
+SITE_RANOBE = 3
+SITE_ADULT = 4
+SITE_ORDER = (SITE_MANGA, SITE_ADULT, SITE_RANOBE, 2)
+SITE_BY_HOST = {
+    "mangalib.me": SITE_MANGA,
+    "mangalib.org": SITE_MANGA,
+    "ranobelib.me": SITE_RANOBE,
+    "hentailib.me": SITE_ADULT,
+    "hentailib.org": SITE_ADULT,
+    "yaoilib.me": SITE_ADULT,
+}
 REFERER = "https://mangalib.me/"
 FALLBACK_IMAGE_SERVERS = ("https://img2.imglib.info", "https://img3.cdnlibs.org")
 
@@ -29,11 +42,16 @@ SLUG_RE = re.compile(r"(\d+--[A-Za-z0-9\-_]+)")
 READ_RE = re.compile(r"/read/v([\d.]+)/c([\d.]+)")
 
 
+class NotFound(SourceError):
+    """Сайт ответил «нет такого» — иногда это правда, иногда так прячут 18+."""
+
+
 @dataclass
 class LinkTarget:
     slug: str
     volume: str | None = None
     number: str | None = None
+    site_id: int | None = None
 
     @property
     def is_chapter(self) -> bool:
@@ -50,6 +68,8 @@ def parse_link(url: str) -> LinkTarget:
             "https://mangalib.me/ru/manga/1357--vagabond"
         )
     target = LinkTarget(slug=slug_match.group(1))
+    host = url.split("//", 1)[-1].split("/", 1)[0].lower().removeprefix("www.")
+    target.site_id = SITE_BY_HOST.get(host)
     read_match = READ_RE.search(url)
     if read_match:
         target.volume, target.number = read_match.group(1), read_match.group(2)
@@ -64,8 +84,13 @@ class MangaLib:
         delay: float = 0.7,
         timeout: float = 30.0,
         transport: httpx.BaseTransport | None = None,
+        token: str | None = None,
+        site_id: int | None = None,
     ) -> None:
         self.delay = delay
+        self.token = token
+        self.site_id = site_id or SITE_MANGA
+        self._site_known = site_id is not None
         self._last_request = 0.0
         self._image_servers: list[str] | None = None
         self._host = API_HOSTS[0]
@@ -76,7 +101,6 @@ class MangaLib:
             headers={
                 "User-Agent": USER_AGENT,
                 "Accept": "application/json",
-                "Site-Id": SITE_ID,
             },
         )
 
@@ -120,8 +144,11 @@ class MangaLib:
 
     def _try_get(self, host: str, path: str, params: dict) -> dict | str:
         """Возвращает данные или короткую причину, по которой хост не годится."""
+        headers = {"Site-Id": str(self.site_id)}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
         try:
-            response = self._client.get(f"{host}/{path}", params=params)
+            response = self._client.get(f"{host}/{path}", params=params, headers=headers)
         except httpx.HTTPError as exc:
             return f"нет связи ({exc.__class__.__name__})"
 
@@ -136,7 +163,7 @@ class MangaLib:
                 "из браузера и собери файл через --local."
             )
         if status == 404:
-            raise SourceError("Страница не найдена: проверь ссылку или номер главы.")
+            raise NotFound("Страница не найдена: проверь ссылку или номер главы.")
         if status == 429:
             raise SourceError("Слишком много запросов. Подожди минуту и повтори.")
         if status == 403:
@@ -160,17 +187,36 @@ class MangaLib:
     # --- данные ---------------------------------------------------------
 
     def manga(self, slug: str) -> MangaInfo:
-        data = self._get(f"manga/{slug}").get("data") or {}
+        data = {}
+        for site in self._site_candidates():
+            self.site_id = site
+            try:
+                data = self._get(f"manga/{slug}").get("data") or {}
+            except NotFound:
+                continue
+            if data:
+                self._site_known = True
+                break
         if not data:
-            raise SourceError("Тайтл не найден.")
+            raise SourceError(
+                "Тайтл не найден ни в одном разделе mangalib.\n"
+                "Проверь ссылку — она должна вести на страницу тайтла."
+            )
         name = data.get("rus_name") or data.get("eng_name") or data.get("name") or slug
         cover = (data.get("cover") or {}).get("default")
+        self.site_id = int(data.get("site") or self.site_id)
         return MangaInfo(
             slug=data.get("slug_url", slug),
             name=name,
             cover_url=cover,
             year=str(data.get("releaseDateString") or ""),
+            site=self.site_id,
         )
+
+    def _site_candidates(self) -> list[int]:
+        if self._site_known:
+            return [self.site_id]
+        return [self.site_id] + [s for s in SITE_ORDER if s != self.site_id]
 
     def chapters(self, slug: str) -> list[ChapterRef]:
         """Список глав одной ветки перевода — той, где глав больше всего."""
@@ -225,12 +271,36 @@ class MangaLib:
         params: dict[str, object] = {"number": chapter.number, "volume": chapter.volume}
         if chapter.branch_id is not None:
             params["branch_id"] = chapter.branch_id
-        data = self._get(f"manga/{slug}/chapter", **params).get("data") or {}
+        try:
+            data = self._get(f"manga/{slug}/chapter", **params).get("data") or {}
+        except NotFound:
+            raise SourceError(self._closed_chapter_message(chapter)) from None
         raw_pages = data.get("pages") or []
         if not raw_pages:
-            raise SourceError(f"{chapter.label}: страницы недоступны.")
+            raise SourceError(self._closed_chapter_message(chapter))
         base = self.image_servers()[0]
         return [f"{base}/{str(page['url']).lstrip('/')}" for page in raw_pages]
+
+    def _closed_chapter_message(self, chapter: ChapterRef) -> str:
+        """Сайт прячет закрытые главы под «нет такой страницы», без 401."""
+        if self.site_id != SITE_ADULT:
+            return (
+                f"{chapter.label}: страницы недоступны.\n"
+                "Глава могла быть снята по требованию правообладателя."
+            )
+        if not self.token:
+            return (
+                f"{chapter.label}: это раздел 18+, страницы он отдаёт только\n"
+                "своему аккаунту. Войди на сайте в браузере и отдай приложению\n"
+                "токен своей сессии:\n\n"
+                "    mangakindle --token-help\n\n"
+                "Логин и капчу приложение за тебя не проходит."
+            )
+        return (
+            f"{chapter.label}: сайт всё ещё не отдаёт страницы.\n"
+            "Скорее всего токен истёк — возьми свежий: mangakindle --token-help\n"
+            "Ещё вариант: в профиле на сайте не включён показ 18+."
+        )
 
     def download(self, url: str) -> bytes:
         """Скачивает одну страницу. При отказе основного сервера пробует запасной."""
