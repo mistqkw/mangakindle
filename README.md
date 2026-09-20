@@ -9,8 +9,22 @@
 
 ## Что уже работает
 
-Командная строка: ссылка → PDF или EPUB, и сразу на Kindle по USB.
-GUI и отправка по почте — следующие этапы.
+Окно и командная строка: ссылка → PDF, AZW3 или EPUB, и сразу на Kindle
+по USB. Отправка по почте — следующий этап.
+
+## Окно
+
+```bash
+mangakindle-gui
+```
+
+Или пункт «MangaKindle» в меню приложений. Одно окно: поле ссылки,
+обложка и название, список глав с чекбоксами («Все», «Снять», диапазон
+вроде `1-3`), выбор формата, направления чтения и разворотов, выбор
+«сразу на Kindle» или «в папку».
+
+Вся работа идёт в фоновом потоке, окно не подвисает; «Отмена» работает
+в любой момент. Кнопка «Токен 18+» — для закрытого раздела.
 
 ## Установка
 
@@ -60,7 +74,7 @@ uv run mangakindle --local ~/Загрузки/глава_5 --chapters 1
 Команда `mangakindle` в PATH, пункт в меню приложений и иконка:
 
 ```bash
-uv tool install .
+uv tool install .          # команды mangakindle и mangakindle-gui
 uv run python assets/make_icon.py
 install -Dm644 assets/icons/mangakindle-48.png  ~/.local/share/icons/hicolor/48x48/apps/mangakindle.png
 install -Dm644 assets/icons/mangakindle-128.png ~/.local/share/icons/hicolor/128x128/apps/mangakindle.png
