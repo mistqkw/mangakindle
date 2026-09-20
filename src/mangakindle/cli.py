@@ -21,6 +21,7 @@ from .source.models import ChapterRef, SourceError
 
 
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_output()
     parser = _build_parser()
     args = parser.parse_args(argv)
 
@@ -134,6 +135,17 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         for line in result.skipped[:5]:
             print(f"  · {line}")
     return 0
+
+
+def _force_utf8_output() -> None:
+    """Windows по умолчанию отдаёт консоли cp1251 и падает на кириллице."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
 
 
 def _interactive() -> int:

@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  PYTHONUTF8: "1"   # иначе консоль Windows спотыкается о кириллицу
+
 jobs:
   pytest:
     runs-on: ubuntu-latest

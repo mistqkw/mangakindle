@@ -82,6 +82,9 @@ def svg() -> str:
 
 
 def main(target: str | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     out = Path(target or Path(__file__).parent / "icons")
     out.mkdir(parents=True, exist_ok=True)
     for size in SIZES:

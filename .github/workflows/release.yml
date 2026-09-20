@@ -5,6 +5,9 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+env:
+  PYTHONUTF8: "1"   # иначе консоль Windows спотыкается о кириллицу
+
 permissions:
   contents: write
 
