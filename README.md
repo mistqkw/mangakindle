@@ -81,6 +81,8 @@ install -Dm644 assets/icons/mangakindle-128.png ~/.local/share/icons/hicolor/128
 install -Dm644 assets/icons/mangakindle-256.png ~/.local/share/icons/hicolor/256x256/apps/mangakindle.png
 install -Dm644 assets/icons/mangakindle.svg     ~/.local/share/icons/hicolor/scalable/apps/mangakindle.svg
 install -Dm644 assets/mangakindle.desktop       ~/.local/share/applications/mangakindle.desktop
+# абсолютный путь в Exec: графическая сессия часто не видит ~/.local/bin
+sed -i "s|^Exec=.*|Exec=$(command -v mangakindle-gui)|" ~/.local/share/applications/mangakindle.desktop
 update-desktop-database ~/.local/share/applications
 gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 ```
