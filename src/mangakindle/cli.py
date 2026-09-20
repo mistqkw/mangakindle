@@ -28,10 +28,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.token_help:
         print(auth.HOW_TO)
         return 0
-    if args.token:
-        auth.save_token(args.token)
-        print("Токен сохранён в системном хранилище. 18+ раздел теперь открыт.")
-        return 0
+    if args.token is not None:
+        return _save_token(args.token)
     if args.forget_token:
         print("Токен удалён." if auth.clear_token() else "Токена и не было.")
         return 0
@@ -216,6 +214,30 @@ def _send_by_email(files: list[Path], settings: Settings) -> None:
         print("Файлы остались в папке, отправишь позже.", file=sys.stderr)
 
 
+def _save_token(value: str) -> int:
+    """Проверяет токен на сайте и только потом кладёт в хранилище."""
+    if not value:
+        print("Беру токен из буфера обмена…")
+        value = auth.from_clipboard()
+    token = auth.clean_token(value)
+
+    print("Проверяю на сайте…")
+    with MangaLib(delay=0.2, token=token) as source:
+        who = source.whoami()
+    if who is None:
+        print(
+            "\nСайт не принял этот токен.\n"
+            "Скорее всего скопировалось не то или сессия истекла.\n"
+            "Как взять свежий: mangakindle --token-help",
+            file=sys.stderr,
+        )
+        return 2
+
+    auth.save_token(token)
+    print(f"Токен принят: ты вошёл как {who}. Закрытый раздел открыт.")
+    return 0
+
+
 def _setup_email() -> int:
     """Спрашивает настройки почты. Пароль уходит в keyring, не в конфиг."""
     import getpass
@@ -367,7 +389,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--delay", type=float, default=0.7, help="пауза между запросами, сек")
     parser.add_argument("--setup-email", action="store_true",
                         help="настроить отправку письмом на Kindle")
-    parser.add_argument("--token", help="сохранить свой токен mangalib для раздела 18+")
+    parser.add_argument("--token", nargs="?", const="", metavar="ТОКЕН",
+                        help="сохранить токен mangalib; без значения — взять из буфера обмена")
     parser.add_argument("--token-help", action="store_true",
                         help="как достать свой токен из браузера")
     parser.add_argument("--forget-token", action="store_true", help="удалить сохранённый токен")

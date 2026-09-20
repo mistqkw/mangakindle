@@ -13,18 +13,30 @@ from __future__ import annotations
 SERVICE = "mangakindle"
 ACCOUNT = "mangalib"
 
-HOW_TO = """Как достать свой токен mangalib:
+# Строка для консоли браузера: находит токен в localStorage и кладёт
+# в буфер обмена. copy() есть в консоли и Chrome, и Firefox.
+CONSOLE_SNIPPET = (
+    "copy((f=o=>o&&typeof o=='object'?Object.entries(o)"
+    ".reduce((a,[k,v])=>a||(k=='access_token'?v:f(v)),null):null)"
+    "(JSON.parse(localStorage.auth||'{}'))||'НЕ НАЙДЕН - войди в аккаунт')"
+)
 
-1. Открой mangalib.me в браузере и войди в аккаунт.
-2. F12 -> вкладка Network (Сеть), обнови страницу.
-3. Найди любой запрос к api2.mangalib.me или api.cdnlibs.org.
-4. В Headers (Заголовки запроса) скопируй значение Authorization
-   целиком после слова Bearer.
+HOW_TO = f"""Токен — это пропуск твоей уже открытой сессии на сайте.
+Он появляется только после входа в аккаунт.
 
-Дальше: mangakindle --token ВСТАВЬ_СЮДА
+1. Открой в браузере mangalib.me или hentailib.me и войди.
+2. Нажми F12, вкладка Console (Консоль).
+3. Вставь туда эту строку и нажми Enter — токен уйдёт в буфер обмена:
 
-Токен ляжет в системное хранилище паролей. Приложение не просит логин
-и пароль и не проходит за тебя капчу — только пользуется твоей сессией."""
+{CONSOLE_SNIPPET}
+
+4. Вернись сюда и выполни:  mangakindle --token
+
+   Без аргумента он сам возьмёт токен из буфера обмена
+   и сразу проверит его на сайте.
+
+Приложение не спрашивает логин с паролем, не логинится за тебя и не
+проходит капчу. Токен лежит в системном хранилище, не в конфиге."""
 
 
 class AuthError(Exception):
@@ -46,12 +58,25 @@ def _wrap(action: str, exc: Exception) -> AuthError:
     )
 
 
-def save_token(token: str) -> None:
-    token = token.strip()
+def clean_token(token: str) -> str:
+    """Приводит вставленное к виду токена и отсекает явно не токен."""
+    token = (token or "").strip().strip('"\'')
     if token.lower().startswith("bearer "):
         token = token[7:].strip()
     if not token:
         raise AuthError("Пустой токен.")
+    if not token.isascii() or any(ch.isspace() for ch in token):
+        raise AuthError(
+            "Это не похоже на токен — в нём пробелы или нелатинские буквы.\n"
+            "Скопируй значение целиком, без кавычек: mangakindle --token-help"
+        )
+    if len(token) < 20:
+        raise AuthError("Слишком короткая строка для токена — скопировалось не всё.")
+    return token
+
+
+def save_token(token: str) -> None:
+    token = clean_token(token)
     keyring = _keyring()
     try:
         keyring.set_password(SERVICE, ACCOUNT, token)
@@ -77,3 +102,34 @@ def clear_token() -> bool:
         return True
     except Exception as exc:
         raise _wrap("удалить", exc) from exc
+
+
+CLIPBOARD_COMMANDS = (
+    ["wl-paste", "--no-newline"],
+    ["xclip", "-selection", "clipboard", "-o"],
+    ["xsel", "--clipboard", "--output"],
+    ["pbpaste"],
+    ["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
+)
+
+
+def from_clipboard() -> str:
+    """Достаёт токен из буфера обмена — чтобы не таскать его руками."""
+    import shutil
+    import subprocess
+
+    for command in CLIPBOARD_COMMANDS:
+        if shutil.which(command[0]) is None:
+            continue
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        value = (result.stdout or "").strip()
+        if value:
+            return value
+    raise AuthError(
+        "Буфер обмена пуст или его нечем прочитать.\n"
+        "Скопируй токен и повтори, либо передай его явно:\n"
+        "    mangakindle --token ТОКЕН"
+    )

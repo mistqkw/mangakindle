@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from ..config import Settings
 from ..deliver import email
+from ..source import auth
 from . import theme
 from .widgets import PixelButton
 
@@ -94,3 +96,148 @@ class EmailDialog(QDialog):
             email.save_password(self.settings.smtp_user, password)
         self.settings.save()
         self.accept()
+
+
+class _TokenCheck(QThread):
+    """Проверка токена на сайте — короткая, но всё же сеть."""
+
+    done = Signal(object)
+
+    def __init__(self, token: str) -> None:
+        super().__init__()
+        self.token = token
+
+    def run(self) -> None:
+        from ..source.mangalib import MangaLib
+
+        try:
+            with MangaLib(delay=0.2, token=self.token) as source:
+                self.done.emit(source.whoami())
+        except Exception:
+            self.done.emit(None)
+
+
+class TokenDialog(QDialog):
+    """Токен для закрытого раздела: подсказка, буфер обмена, проверка."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Токен mangalib")
+        self.setMinimumWidth(560)
+        self.setStyleSheet(theme.QSS)
+        self.checker: _TokenCheck | None = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
+
+        steps = QLabel(
+            "Токен — пропуск твоей уже открытой сессии, он появляется только\n"
+            "после входа в аккаунт на сайте.\n\n"
+            "1. Войди на mangalib.me или hentailib.me в браузере\n"
+            "2. F12 → вкладка Console\n"
+            "3. Вставь строку ниже, нажми Enter — токен уйдёт в буфер\n"
+            "4. Здесь нажми «Вставить из буфера»"
+        )
+        steps.setFont(theme.body_font(9))
+        steps.setStyleSheet(f"color: {theme.MUTED};")
+        layout.addWidget(steps)
+
+        snippet = QLineEdit(auth.CONSOLE_SNIPPET)
+        snippet.setReadOnly(True)
+        snippet.setFont(theme.body_font(8))
+        snippet.setCursorPosition(0)
+        layout.addWidget(snippet)
+
+        copy_row = QHBoxLayout()
+        copy_row.addStretch(1)
+        copy_snippet = PixelButton("Скопировать строку")
+        copy_snippet.setFixedWidth(180)
+        copy_snippet.clicked.connect(lambda: self._copy(snippet.text()))
+        copy_row.addWidget(copy_snippet)
+        layout.addLayout(copy_row)
+
+        self.token = QLineEdit()
+        self.token.setPlaceholderText("сюда попадёт токен")
+        self.token.setFont(theme.body_font(9))
+        layout.addWidget(self.token)
+
+        self.result = QLabel(" ")
+        self.result.setFont(theme.body_font(9))
+        self.result.setWordWrap(True)
+        layout.addWidget(self.result)
+
+        buttons = QHBoxLayout()
+        forget = PixelButton("Забыть токен")
+        forget.setFixedWidth(148)
+        forget.clicked.connect(self._forget)
+        buttons.addWidget(forget)
+        buttons.addStretch(1)
+
+        paste = PixelButton("Вставить из буфера")
+        paste.setFixedWidth(186)
+        paste.clicked.connect(self._paste)
+        buttons.addWidget(paste)
+
+        self.save_button = PixelButton("Проверить и сохранить", primary=True)
+        self.save_button.setFixedWidth(230)
+        self.save_button.clicked.connect(self._check_and_save)
+        buttons.addWidget(self.save_button)
+        layout.addLayout(buttons)
+
+    # --- действия ---
+
+    def _copy(self, text: str) -> None:
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.clipboard().setText(text)
+        self._show("Строка скопирована — вставь её в консоль браузера.", theme.MUTED)
+
+    def _paste(self) -> None:
+        from PySide6.QtWidgets import QApplication
+
+        value = (QApplication.clipboard().text() or "").strip()
+        if not value:
+            self._show("Буфер пуст.", theme.ERROR)
+            return
+        self.token.setText(value)
+        self._check_and_save()
+
+    def _forget(self) -> None:
+        try:
+            self._show("Токен удалён." if auth.clear_token() else "Токена и не было.", theme.MUTED)
+        except auth.AuthError as exc:
+            self._show(str(exc), theme.ERROR)
+
+    def _check_and_save(self) -> None:
+        try:
+            token = auth.clean_token(self.token.text())
+        except auth.AuthError as exc:
+            self._show(str(exc), theme.ERROR)
+            return
+
+        self.save_button.setEnabled(False)
+        self._show("Проверяю на сайте…", theme.MUTED)
+        self.checker = _TokenCheck(token)
+        self.checker.done.connect(lambda who: self._on_checked(who, token))
+        self.checker.start()
+
+    def _on_checked(self, who, token: str) -> None:
+        self.save_button.setEnabled(True)
+        if who is None:
+            self._show(
+                "Сайт не принял этот токен — скопировалось не то или сессия истекла.",
+                theme.ERROR,
+            )
+            return
+        try:
+            auth.save_token(token)
+        except auth.AuthError as exc:
+            self._show(str(exc), theme.ERROR)
+            return
+        self._show(f"Принято: ты вошёл как {who}.", theme.OK)
+        self.accept()
+
+    def _show(self, text: str, tone: str) -> None:
+        self.result.setText(text)
+        self.result.setStyleSheet(f"color: {tone};")

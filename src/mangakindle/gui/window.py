@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -378,19 +377,10 @@ class MainWindow(QMainWindow):
             self._say("Почта ещё не настроена — жми «Почта…»", theme.MUTED)
 
     def ask_token(self) -> None:
-        token, ok = QInputDialog.getText(
-            self, "Токен mangalib", auth.HOW_TO.split("\n\nДальше")[0]
-        )
-        if not ok:
-            return
-        try:
-            if token.strip():
-                auth.save_token(token)
-                self._say("Токен сохранён. Закрытый раздел теперь открыт.", theme.OK)
-            elif auth.clear_token():
-                self._say("Токен удалён.")
-        except auth.AuthError as exc:
-            self._say(str(exc), theme.ERROR)
+        from .dialogs import TokenDialog
+
+        if TokenDialog(self).exec():
+            self._say("Токен принят. Закрытый раздел открыт.", theme.OK)
 
     def start_build(self) -> None:
         chapters = self.selected_chapters()

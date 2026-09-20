@@ -48,6 +48,10 @@ SLUG_RE = re.compile(r"(\d+--[A-Za-z0-9\-_]+)")
 READ_RE = re.compile(r"/read/v([\d.]+)/c([\d.]+)")
 
 
+class Unauthorized(SourceError):
+    """Сайт сказал «ты не вошёл»."""
+
+
 class NotFound(SourceError):
     """Сайт ответил «нет такого» — иногда это правда, иногда так прячут 18+."""
 
@@ -94,7 +98,8 @@ class MangaLib:
         site_id: int | None = None,
     ) -> None:
         self.delay = delay
-        self.token = token
+        # заголовки уходят в ASCII: кривую строку лучше не брать вовсе
+        self.token = token if (token or "").isascii() else None
         self.site_id = site_id or SITE_MANGA
         self._site_known = site_id is not None
         self._last_request = 0.0
@@ -163,7 +168,7 @@ class MangaLib:
         status = response.status_code
 
         if status == 401:
-            raise SourceError(
+            raise Unauthorized(
                 "Mangalib требует вход для этого тайтла — обычно это 18+.\n"
                 "Логин и капчу приложение не обходит: сохрани страницы\n"
                 "из браузера и собери файл через --local."
@@ -287,6 +292,17 @@ class MangaLib:
             raise SourceError(self._closed_chapter_message(chapter))
         base = self.image_servers()[0]
         return [f"{base}/{str(page['url']).lstrip('/')}" for page in raw_pages]
+
+    def whoami(self) -> str | None:
+        """Проверяет токен на сайте. Возвращает имя аккаунта или None."""
+        try:
+            data = self._get("auth/me").get("data") or {}
+        except SourceError:
+            return None
+        for key in ("username", "name", "login", "email"):
+            if data.get(key):
+                return str(data[key])
+        return "аккаунт" if data else None
 
     def _closed_chapter_message(self, chapter: ChapterRef) -> str:
         """Сайт прячет закрытые главы под «нет такой страницы», без 401."""
