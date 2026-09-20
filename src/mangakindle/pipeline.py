@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .config import Settings, cache_dir
@@ -63,9 +63,7 @@ def build(
     files: list[Path] = []
     skipped: list[str] = []
     total_pages = 0
-    cover = None
-    if not settings.per_chapter:
-        cover = _fetch_cover(source, manga, options)
+    cover = _fetch_cover(source, manga, options) if settings.cover else None
 
     for group in groups:
         if cancelled():
@@ -108,7 +106,8 @@ def build(
         builder.write(path)
         progress(f"Собираю {path.name}", 1, 1)
         files.append(path)
-        total_pages += page_number
+        # обложка тоже лист в готовом файле, считаем её
+        total_pages += page_number + (1 if cover is not None else 0)
 
         if not settings.keep_cache:
             _clear_cache(manga, group)
@@ -126,16 +125,22 @@ def build(
 def _make_builder(settings: Settings, manga: MangaInfo, group: list[ChapterRef], cover):
     title = manga.title if len(group) > 1 else f"{manga.title} — {group[0].label}"
     fmt = settings.output_format
+    jpeg = encode_jpeg(cover, settings.jpeg_quality) if cover is not None else None
+
     if fmt == "epub":
         builder = EpubBuilder(title=title, direction=settings.direction)
-        if cover is not None:
-            builder.cover = encode_jpeg(cover, settings.jpeg_quality)
+        builder.cover = jpeg
         return builder
     if fmt == "cbz":
-        return CbzBuilder()
+        builder = CbzBuilder()
+        if jpeg is not None:
+            builder.add_page(jpeg)
+        return builder
+
     builder = PdfBuilder(title=title)
-    if cover is not None:
-        builder.add_page(encode_jpeg(cover, settings.jpeg_quality), cover.width, cover.height)
+    if jpeg is not None:
+        page = builder.add_page(jpeg, cover.width, cover.height)
+        builder.add_bookmark("Обложка", page)
     return builder
 
 
@@ -176,11 +181,14 @@ def _clear_cache(manga: MangaInfo, group: list[ChapterRef]) -> None:
 
 
 def _fetch_cover(source, manga: MangaInfo, options: PageOptions):
-    if not manga.cover_url:
+    """Обложка с сайта. Она маленькая (около 375x534), поэтому её тянет
+    вверх почти втрое — резкость приглушаем, иначе лезут артефакты JPEG."""
+    if not getattr(manga, "cover_url", None):
         return None
+    cover_options = replace(options, spread="keep", trim=False, sharpen=25)
     try:
         data = source.download(manga.cover_url)
-        pages = prepare_page(data, options)
+        pages = prepare_page(data, cover_options)
         return pages[0] if pages else None
     except (SourceError, OSError, ValueError):
         return None

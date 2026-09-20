@@ -22,6 +22,7 @@ class PageOptions:
     width: int = KINDLE_WIDTH
     height: int = KINDLE_HEIGHT
     quality: int = 85
+    sharpen: int = 60           # сила UnsharpMask в процентах
 
 
 def prepare_page(data: bytes, opts: PageOptions) -> list[Image.Image]:
@@ -103,7 +104,10 @@ def _fit_to_screen(image: Image.Image, opts: PageOptions) -> Image.Image:
     scale = min(opts.width / image.width, opts.height / image.height)
     target = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
     image = image.resize(target, Image.LANCZOS)
-    image = image.filter(ImageFilter.UnsharpMask(radius=1.2, percent=60, threshold=3))
+    if opts.sharpen > 0:
+        image = image.filter(
+            ImageFilter.UnsharpMask(radius=1.2, percent=opts.sharpen, threshold=3)
+        )
 
     if image.size == (opts.width, opts.height):
         return image

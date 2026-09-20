@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     settings.trim = not args.no_trim
     settings.per_chapter = args.split
     settings.keep_cache = args.keep_cache
+    settings.cover = not args.no_cover
     settings.jpeg_quality = args.quality
     settings.delay = args.delay
 
@@ -253,6 +254,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--direction", choices=("rtl", "ltr"), default="rtl")
     parser.add_argument("--spread", choices=("split", "rotate", "keep"), default="split")
     parser.add_argument("--no-trim", action="store_true", help="не обрезать поля")
+    parser.add_argument("--no-cover", action="store_true",
+                        help="не класть обложку с сайта первой страницей")
     parser.add_argument("--out", help="папка для готовых файлов")
     parser.add_argument("--keep-cache", action="store_true", help="не удалять скачанные страницы")
     parser.add_argument("--quality", type=int, default=85, help="качество JPEG, по умолчанию 85")

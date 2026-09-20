@@ -43,6 +43,7 @@ class Settings:
     output_format: str = "pdf"          # pdf | epub | cbz
     per_chapter: bool = False           # True — каждая глава отдельным файлом
     keep_cache: bool = False
+    cover: bool = True                  # первой страницей — обложка с сайта
 
     # обработка страниц
     direction: str = "rtl"              # rtl (манга) | ltr (манхва)
@@ -93,7 +94,7 @@ class Settings:
             return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
         out = ["# MangaKindle — настройки. Пароль SMTP здесь не хранится.", "", "[output]"]
-        for name in ("output_dir", "output_format", "per_chapter", "keep_cache"):
+        for name in ("output_dir", "output_format", "per_chapter", "keep_cache", "cover"):
             out.append(f"{name} = {val(getattr(self, name))}")
         out += ["", "[pages]"]
         for name in ("direction", "spread", "trim", "jpeg_quality"):

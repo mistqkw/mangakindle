@@ -111,3 +111,45 @@ def test_split_makes_a_file_per_chapter(tmp_path, monkeypatch):
     )
 
     assert [f.name for f in result.files] == ["Бродяга — т1 гл1.pdf", "Бродяга — т1 гл2.pdf"]
+
+
+def test_cover_from_site_becomes_the_first_page(tmp_path, monkeypatch):
+    from mangakindle import pipeline
+    from mangakindle.source.models import MangaInfo
+
+    monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
+    manga = MangaInfo(slug="1--x", name="Бродяга", cover_url="https://example/cover.jpg")
+
+    with_cover = pipeline.build(_FakeSource(), manga, _chapters(), _settings(tmp_path))
+    without = pipeline.build(
+        _FakeSource(), manga, _chapters(), _settings(tmp_path / "bare", cover=False)
+    )
+
+    assert with_cover.pages == without.pages + 1
+    assert b"\xfe\xff" + "Обложка".encode("utf-16-be") in bytes.fromhex(
+        _titles_hex(with_cover.files[0])
+    )
+
+
+def _titles_hex(path) -> str:
+    import re
+
+    data = path.read_bytes()
+    return "".join(t.decode() for t in re.findall(rb"/Title <([0-9a-fA-F]+)>", data))
+
+
+def test_missing_cover_does_not_break_the_build(tmp_path, monkeypatch):
+    from mangakindle import pipeline
+    from mangakindle.source.models import MangaInfo
+
+    monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
+
+    class _NoCover(_FakeSource):
+        def download(self, url):
+            if "cover" in url:
+                raise OSError("сеть отвалилась")
+            return _jpeg((400, 600))
+
+    manga = MangaInfo(slug="1--x", name="Бродяга", cover_url="https://example/cover.jpg")
+    result = pipeline.build(_NoCover(), manga, _chapters(), _settings(tmp_path))
+    assert result.files and result.pages == 4
