@@ -6,7 +6,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-pytest.importorskip("PySide6")
+# QtWidgets тянет системные libEGL/libGL — на голой машине их может не быть
+pytest.importorskip("PySide6.QtWidgets", reason="Qt не грузится в этой системе")
 
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
