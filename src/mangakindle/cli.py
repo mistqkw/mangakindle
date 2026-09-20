@@ -90,7 +90,7 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
             wanted = target.number
 
     with source:
-        print(f"{manga.title} — глав доступно: {len(chapters)}")
+        print(f"{manga.title}{_where(manga)} — глав доступно: {len(chapters)}")
 
         if args.list or not wanted:
             _print_chapters(chapters)
@@ -209,6 +209,15 @@ def _size_warning(selected: list[ChapterRef], settings: Settings) -> str:
         "Kindle такой файл откроет нескоро. Лучше взять диапазон поменьше "
         "или добавить --split."
     )
+
+
+def _where(manga) -> str:
+    """Раздел и возрастная метка. Метка ни на что не влияет — закрыт только
+    отдельный раздел 18+, и видеть это полезно сразу."""
+    from .source.mangalib import SITE_NAMES
+
+    parts = [p for p in (manga.age, SITE_NAMES.get(manga.site)) if p]
+    return f" ({', '.join(parts)})" if parts else ""
 
 
 def _progress(phase: str, done: int, total: int) -> None:

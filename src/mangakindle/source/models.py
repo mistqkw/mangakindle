@@ -17,6 +17,7 @@ class MangaInfo:
     author: str = ""
     year: str = ""
     site: int = 1          # 1 — обычный раздел, 4 — закрытый 18+
+    age: str = ""          # метка вроде "16+" — на доступ она не влияет
 
     @property
     def title(self) -> str:

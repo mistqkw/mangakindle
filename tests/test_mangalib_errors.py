@@ -146,3 +146,21 @@ def test_ordinary_section_keeps_the_licensing_explanation():
     with _client(_hidden) as source:
         with pytest.raises(SourceError, match="правообладателя"):
             source.pages("1--x", _chapter())
+
+
+def test_age_label_and_section_are_reported_separately():
+    """Метка 18+ и закрытый раздел — разные вещи, и это должно быть видно."""
+    from mangakindle.cli import _where
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"data": {"slug_url": "1--x", "name": "X", "site": 1,
+                           "ageRestriction": {"label": "18+"}}},
+        )
+
+    with _client(handler) as source:
+        info = source.manga("1--x")
+
+    assert info.age == "18+" and info.site == 1
+    assert _where(info) == " (18+, mangalib)"

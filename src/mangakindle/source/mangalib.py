@@ -25,6 +25,12 @@ SITE_MANGA = 1
 SITE_RANOBE = 3
 SITE_ADULT = 4
 SITE_ORDER = (SITE_MANGA, SITE_ADULT, SITE_RANOBE, 2)
+SITE_NAMES = {
+    SITE_MANGA: "mangalib",
+    2: "slashlib",
+    SITE_RANOBE: "ranobelib",
+    SITE_ADULT: "закрытый раздел",
+}
 SITE_BY_HOST = {
     "mangalib.me": SITE_MANGA,
     "mangalib.org": SITE_MANGA,
@@ -211,6 +217,7 @@ class MangaLib:
             cover_url=cover,
             year=str(data.get("releaseDateString") or ""),
             site=self.site_id,
+            age=str((data.get("ageRestriction") or {}).get("label") or ""),
         )
 
     def _site_candidates(self) -> list[int]:
