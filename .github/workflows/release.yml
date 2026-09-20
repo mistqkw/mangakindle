@@ -97,27 +97,14 @@ jobs:
           Copy-Item dist/mangakindle.exe, dist/mangakindle-gui.exe, README.md -Destination package
           Compress-Archive -Path package/* -DestinationPath mangakindle-windows-x86_64.zip
 
-      - uses: actions/upload-artifact@v4
+      - name: Выложить в релиз
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
-          name: mangakindle-${{ matrix.platform }}
-          path: |
+          files: |
             mangakindle-linux-x86_64.tar.gz
             mangakindle-windows-x86_64.zip
-          if-no-files-found: ignore
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/*
+          fail_on_unmatched_files: false
           generate_release_notes: true
           body: |
             Личный конвертер манги под Kindle 11th gen.
