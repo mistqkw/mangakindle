@@ -14,7 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DOCUMENTS = "documents"
+THUMBNAILS = Path("system") / "thumbnails"
 LABEL = "Kindle"
+THUMB_HEIGHT = 500  # столько же, сколько у миниатюр, которые делает сам Kindle
 
 
 class KindleError(Exception):
@@ -136,6 +138,34 @@ def send(path: Path, kindle: Kindle | None = None) -> Path:
             f"Файл скопирован не полностью: {copied} из {size} байт. "
             "Проверь кабель и повтори."
         )
+    return target
+
+
+def write_thumbnail(kindle: Kindle, document_uuid: str, cover: bytes) -> Path | None:
+    """Кладёт обложку на полку Kindle рядом с его собственными миниатюрами.
+
+    Имя файла Kindle берёт из UUID документа — у AZW3 он лежит внутри файла,
+    поэтому миниатюру можно положить заранее, не дожидаясь, пока устройство
+    само откроет книгу. Ничего чужого не трогаем: файл только добавляется.
+    """
+    import io
+
+    from PIL import Image
+
+    folder = kindle.root / THUMBNAILS
+    if not folder.is_dir():
+        return None
+    try:
+        image = Image.open(io.BytesIO(cover)).convert("L")
+        scale = THUMB_HEIGHT / image.height
+        image = image.resize(
+            (max(1, round(image.width * scale)), THUMB_HEIGHT), Image.LANCZOS
+        )
+        target = folder / f"thumbnail_{document_uuid}_PDOC_portrait.jpg"
+        image.save(target, format="JPEG", quality=85)
+    except (OSError, ValueError):
+        return None
+    _flush()
     return target
 
 

@@ -68,3 +68,49 @@ def test_filename_keeps_the_taken_range():
     group = [ChapterRef(volume="1", number=str(n)) for n in (1, 2, 3)]
     assert _filename(manga, group, "pdf") == "Бродяга — гл1-3.pdf"
     assert _filename(manga, group[:1], "pdf") == "Бродяга — т1 гл1.pdf"
+
+
+def test_thumbnail_lands_where_kindle_looks_for_it(tmp_path, fake_kindle):
+    import io
+
+    from PIL import Image
+
+    from mangakindle.convert.image import KINDLE_HEIGHT, KINDLE_WIDTH
+
+    (fake_kindle / "system" / "thumbnails").mkdir()
+    buffer = io.BytesIO()
+    Image.new("L", (KINDLE_WIDTH, KINDLE_HEIGHT), 180).save(buffer, format="JPEG")
+
+    target = usb.write_thumbnail(usb.Kindle(fake_kindle), "abc-123", buffer.getvalue())
+
+    assert target.name == "thumbnail_abc-123_PDOC_portrait.jpg"
+    thumb = Image.open(target)
+    assert thumb.height == usb.THUMB_HEIGHT and thumb.mode == "L"
+
+
+def test_thumbnail_is_skipped_when_device_has_no_such_folder(tmp_path, fake_kindle):
+    assert usb.write_thumbnail(usb.Kindle(fake_kindle), "abc-123", b"not-an-image") is None
+
+
+def test_azw3_without_calibre_fails_before_downloading(tmp_path, monkeypatch):
+    import pytest as _pytest
+
+    from mangakindle import pipeline
+    from mangakindle.convert import azw3
+    from mangakindle.source.models import MangaInfo, SourceError
+
+    monkeypatch.setattr(azw3, "available", lambda: False)
+
+    class _Boom:
+        def pages(self, *_):
+            raise AssertionError("до скачивания дойти не должно")
+
+    settings = Settings(output_dir=tmp_path, output_format="azw3")
+    with _pytest.raises(SourceError, match="нужен calibre"):
+        pipeline.build(_Boom(), MangaInfo(slug="1--x", name="X"), _chapters(), settings)
+
+
+def _chapters():
+    from mangakindle.source.models import ChapterRef
+
+    return [ChapterRef(volume="1", number="1")]

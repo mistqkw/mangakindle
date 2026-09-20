@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .config import Settings, cache_dir
+from .convert import azw3
 from .convert.cbz import CbzBuilder
 from .convert.epub import EpubBuilder
 from .convert.image import PageOptions, encode_jpeg, prepare_page
@@ -44,6 +45,9 @@ def build(
     """Собирает файлы для выбранных глав и возвращает пути к ним."""
     if not chapters:
         raise SourceError("Не выбрано ни одной главы.")
+    if settings.output_format == "azw3" and not azw3.available():
+        # проверяем до скачивания, а не после сотни страниц
+        raise SourceError(azw3.requirement_message())
 
     progress = on_progress or (lambda phase, done, total: None)
     cancelled = is_cancelled or (lambda: False)
@@ -103,7 +107,7 @@ def build(
             continue
         path = settings.output_dir / _filename(manga, group, settings.output_format)
         progress(f"Собираю {path.name}", 0, 1)
-        builder.write(path)
+        _write(builder, path, settings)
         progress(f"Собираю {path.name}", 1, 1)
         files.append(path)
         # обложка тоже лист в готовом файле, считаем её
@@ -127,7 +131,7 @@ def _make_builder(settings: Settings, manga: MangaInfo, group: list[ChapterRef],
     fmt = settings.output_format
     jpeg = encode_jpeg(cover, settings.jpeg_quality) if cover is not None else None
 
-    if fmt == "epub":
+    if fmt in ("epub", "azw3"):
         builder = EpubBuilder(title=title, direction=settings.direction)
         builder.cover = jpeg
         return builder
@@ -142,6 +146,20 @@ def _make_builder(settings: Settings, manga: MangaInfo, group: list[ChapterRef],
         page = builder.add_page(jpeg, cover.width, cover.height)
         builder.add_bookmark("Обложка", page)
     return builder
+
+
+def _write(builder, path: Path, settings: Settings) -> Path:
+    """AZW3 собирается из нашего же EPUB — промежуточный файл не оставляем."""
+    if settings.output_format != "azw3":
+        return builder.write(path)
+    staging = path.with_name(path.stem + ".staging.epub")
+    try:
+        builder.write(staging)
+        return azw3.from_epub(staging, path)
+    except azw3.ConvertError as exc:
+        raise SourceError(str(exc)) from exc
+    finally:
+        staging.unlink(missing_ok=True)
 
 
 def _add_page(builder, jpeg: bytes, image, chapter_title: str) -> None:

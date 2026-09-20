@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import APP_NAME, __version__
 from .config import Settings
+from .convert import azw3
 from .deliver import usb
 from .pipeline import Cancelled, build
 from .source.local import LocalSource
@@ -153,6 +154,9 @@ def _send_to_kindle(files: list[Path], eject_after: bool = False) -> None:
         for path in files:
             target = usb.send(path, kindle)
             print(f"  скопировано: {target.name}")
+            thumb = _put_cover_on_shelf(kindle, target)
+            if thumb:
+                print("  обложка положена на полку")
         if eject_after and usb.eject():
             print("Устройство отмонтировано — можно отключать кабель.")
         else:
@@ -160,6 +164,17 @@ def _send_to_kindle(files: list[Path], eject_after: bool = False) -> None:
     except usb.KindleError as exc:
         print(f"\n{exc}", file=sys.stderr)
         print("Файлы остались в папке, отправишь позже.", file=sys.stderr)
+
+
+def _put_cover_on_shelf(kindle, path: Path):
+    """Для AZW3 миниатюру можно положить сразу — UUID документа лежит в файле."""
+    if path.suffix.lower() != ".azw3":
+        return None
+    document_uuid = azw3.document_uuid(path)
+    cover = azw3.extract_cover(path)
+    if not document_uuid or not cover:
+        return None
+    return usb.write_thumbnail(kindle, document_uuid, cover)
 
 
 def _size_warning(selected: list[ChapterRef], settings: Settings) -> str:
@@ -249,8 +264,9 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="folder — сохранить в папку, kindle — сразу на устройство по USB")
     parser.add_argument("--eject", action="store_true",
                         help="отмонтировать Kindle после копирования")
-    parser.add_argument("--format", choices=("pdf", "epub", "cbz"), default="pdf",
-                        help="pdf — для USB, epub — для отправки по почте")
+    parser.add_argument("--format", choices=("pdf", "azw3", "epub", "cbz"), default="pdf",
+                        help="pdf — для USB, azw3 — для USB с обложкой на полке "
+                             "(нужен calibre), epub — для отправки по почте")
     parser.add_argument("--direction", choices=("rtl", "ltr"), default="rtl")
     parser.add_argument("--spread", choices=("split", "rotate", "keep"), default="split")
     parser.add_argument("--no-trim", action="store_true", help="не обрезать поля")
