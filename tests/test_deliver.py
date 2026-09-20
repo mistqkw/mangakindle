@@ -114,3 +114,31 @@ def _chapters():
     from mangakindle.source.models import ChapterRef
 
     return [ChapterRef(volume="1", number="1")]
+
+
+def test_token_can_be_pasted_as_whole_browser_value():
+    """Из браузера проще скопировать весь ключ auth, чем выковыривать токен."""
+    from mangakindle.source import auth
+
+    whole = (
+        '{"auth":{"id":42,"username":"mista"},'
+        '"token":{"token_type":"Bearer","access_token":"eyJhbGci.payload.signature12345"}}'
+    )
+    assert auth.clean_token(whole) == "eyJhbGci.payload.signature12345"
+    assert auth.clean_token(" Bearer eyJhbGci.payload.signature12345 ") == (
+        "eyJhbGci.payload.signature12345"
+    )
+
+
+def test_anonymous_browser_value_says_you_are_not_logged_in():
+    from mangakindle.source import auth
+
+    with pytest.raises(auth.AuthError, match="выполнен вход"):
+        auth.clean_token('{"prevUrl":"","timestamp":1789934118370}')
+
+
+def test_cyrillic_junk_is_rejected_before_it_reaches_http():
+    from mangakindle.source import auth
+
+    with pytest.raises(auth.AuthError, match="не похоже на токен"):
+        auth.clean_token("это точно не токен")

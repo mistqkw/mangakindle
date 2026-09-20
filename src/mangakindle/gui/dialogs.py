@@ -135,30 +135,25 @@ class TokenDialog(QDialog):
             "Токен — пропуск твоей уже открытой сессии, он появляется только\n"
             "после входа в аккаунт на сайте.\n\n"
             "1. Войди на mangalib.me или hentailib.me в браузере\n"
-            "2. F12 → вкладка Console\n"
-            "3. Вставь строку ниже, нажми Enter — токен уйдёт в буфер\n"
-            "4. Здесь нажми «Вставить из буфера»"
+            "2. F12 → вкладка Application (Приложение)\n"
+            "3. Слева: Local storage → адрес сайта → строка с ключом auth\n"
+            "4. Правой кнопкой по значению → Copy value\n"
+            "5. Здесь нажми «Вставить из буфера» — токен я достану сам"
         )
         steps.setFont(theme.body_font(9))
         steps.setStyleSheet(f"color: {theme.MUTED};")
         layout.addWidget(steps)
 
-        snippet = QLineEdit(auth.CONSOLE_SNIPPET)
-        snippet.setReadOnly(True)
-        snippet.setFont(theme.body_font(8))
-        snippet.setCursorPosition(0)
-        layout.addWidget(snippet)
-
-        copy_row = QHBoxLayout()
-        copy_row.addStretch(1)
-        copy_snippet = PixelButton("Скопировать строку")
-        copy_snippet.setFixedWidth(180)
-        copy_snippet.clicked.connect(lambda: self._copy(snippet.text()))
-        copy_row.addWidget(copy_snippet)
-        layout.addLayout(copy_row)
+        hint = QLabel(
+            "Можно и через консоль: набери там руками  localStorage.auth  —\n"
+            "вставлять код в консоль браузер не даст, и правильно сделает."
+        )
+        hint.setFont(theme.body_font(9))
+        hint.setStyleSheet(f"color: {theme.MUTED};")
+        layout.addWidget(hint)
 
         self.token = QLineEdit()
-        self.token.setPlaceholderText("сюда попадёт токен")
+        self.token.setPlaceholderText("сюда попадёт токен или всё значение ключа auth")
         self.token.setFont(theme.body_font(9))
         layout.addWidget(self.token)
 

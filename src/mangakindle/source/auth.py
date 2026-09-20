@@ -21,19 +21,30 @@ CONSOLE_SNIPPET = (
     "(JSON.parse(localStorage.auth||'{}'))||'НЕ НАЙДЕН - войди в аккаунт')"
 )
 
-HOW_TO = f"""Токен — это пропуск твоей уже открытой сессии на сайте.
+HOW_TO = f"""Токен — пропуск твоей уже открытой сессии на сайте.
 Он появляется только после входа в аккаунт.
 
-1. Открой в браузере mangalib.me или hentailib.me и войди.
-2. Нажми F12, вкладка Console (Консоль).
-3. Вставь туда эту строку и нажми Enter — токен уйдёт в буфер обмена:
+СПОСОБ 1 — мышкой, ничего никуда не вставляя:
 
-{CONSOLE_SNIPPET}
+1. Войди на mangalib.me или hentailib.me в браузере.
+2. F12 -> вкладка Application (Приложение).
+3. Слева: Local storage -> адрес сайта.
+4. Найди строку с ключом  auth,  щёлкни по значению правой кнопкой
+   и выбери Copy value (Копировать значение).
+5. Здесь выполни:  mangakindle --token
 
-4. Вернись сюда и выполни:  mangakindle --token
+   Оно возьмёт скопированное из буфера, само достанет оттуда токен
+   и проверит его на сайте.
 
-   Без аргумента он сам возьмёт токен из буфера обмена
-   и сразу проверит его на сайте.
+СПОСОБ 2 — если хочется через консоль:
+
+   Браузер не даёт вставлять чужой код в консоль, и правильно делает.
+   Но короткую строку можно набрать руками, она безобидная:
+
+       localStorage.auth
+
+   Enter — консоль напечатает то же самое значение. Скопируй его
+   целиком и снова:  mangakindle --token
 
 Приложение не спрашивает логин с паролем, не логинится за тебя и не
 проходит капчу. Токен лежит в системном хранилище, не в конфиге."""
@@ -58,9 +69,49 @@ def _wrap(action: str, exc: Exception) -> AuthError:
     )
 
 
+def extract_token(value: str) -> str:
+    """Находит access_token внутри JSON — можно скормить всё содержимое
+    ключа auth из хранилища браузера, разбираться будем сами."""
+    import json
+
+    text = (value or "").strip()
+    if not text.startswith("{") and not text.startswith("["):
+        return text
+
+    def walk(node):
+        if isinstance(node, dict):
+            for key, item in node.items():
+                if key == "access_token" and isinstance(item, str) and item:
+                    return item
+                found = walk(item)
+                if found:
+                    return found
+        elif isinstance(node, list):
+            for item in node:
+                found = walk(item)
+                if found:
+                    return found
+        return None
+
+    try:
+        found = walk(json.loads(text))
+    except ValueError:
+        raise AuthError(
+            "Это похоже на JSON, но разобрать его не вышло — "
+            "скопировалось не целиком."
+        ) from None
+    if not found:
+        raise AuthError(
+            "В скопированном нет access_token.\n"
+            "Похоже, на сайте не выполнен вход: токен появляется только "
+            "после входа в аккаунт."
+        )
+    return found
+
+
 def clean_token(token: str) -> str:
     """Приводит вставленное к виду токена и отсекает явно не токен."""
-    token = (token or "").strip().strip('"\'')
+    token = extract_token(token).strip().strip('"\'')
     if token.lower().startswith("bearer "):
         token = token[7:].strip()
     if not token:
