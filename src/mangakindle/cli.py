@@ -22,6 +22,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not args.url and not args.local:
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            # запуск без аргументов из меню или двойным кликом
+            return _interactive()
         parser.error("нужна ссылка на mangalib или --local с папкой/архивом")
 
     settings = Settings.load()
@@ -93,6 +96,32 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         for line in result.skipped[:5]:
             print(f"  · {line}")
     return 0
+
+
+def _interactive() -> int:
+    """Диалог в терминале для запуска из меню — без ключей и без GUI."""
+    print(f"{APP_NAME} {__version__} — манга на Kindle\n")
+    try:
+        url = input("Ссылка на мангу: ").strip()
+        if not url:
+            return 0
+        argv = [url]
+        spec = input("Главы (1-3, 1,5,7 или all): ").strip()
+        if spec:
+            argv += ["--chapters", spec]
+        fmt = input("Формат — pdf для USB, epub для почты [pdf]: ").strip().lower()
+        if fmt in ("pdf", "epub", "cbz"):
+            argv += ["--format", fmt]
+        print()
+        code = main(argv)
+    except (EOFError, KeyboardInterrupt):
+        print("\nОтменено.")
+        return 130
+    try:
+        input("\nEnter — закрыть окно ")
+    except (EOFError, KeyboardInterrupt):
+        pass
+    return code
 
 
 def _progress(phase: str, done: int, total: int) -> None:

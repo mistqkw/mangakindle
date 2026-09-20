@@ -48,6 +48,25 @@ uv run mangakindle "https://mangalib.me/ru/manga/1357--vagabond" --chapters 1-10
 uv run mangakindle --local ~/Загрузки/глава_5 --chapters 1
 ```
 
+### Установка в систему (Linux)
+
+Команда `mangakindle` в PATH, пункт в меню приложений и иконка:
+
+```bash
+uv tool install .
+uv run python assets/make_icon.py
+install -Dm644 assets/icons/mangakindle-48.png  ~/.local/share/icons/hicolor/48x48/apps/mangakindle.png
+install -Dm644 assets/icons/mangakindle-128.png ~/.local/share/icons/hicolor/128x128/apps/mangakindle.png
+install -Dm644 assets/icons/mangakindle-256.png ~/.local/share/icons/hicolor/256x256/apps/mangakindle.png
+install -Dm644 assets/icons/mangakindle.svg     ~/.local/share/icons/hicolor/scalable/apps/mangakindle.svg
+install -Dm644 assets/mangakindle.desktop       ~/.local/share/applications/mangakindle.desktop
+update-desktop-database ~/.local/share/applications
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
+```
+
+Запуск из меню открывает терминал и спрашивает ссылку и главы —
+пока GUI нет, это честный интерфейс, а не кнопка-пустышка.
+
 ### Ключи
 
 | Ключ | Что делает |

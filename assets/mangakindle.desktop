@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=MangaKindle
+GenericName=Конвертер манги для Kindle
+Comment=Скачать главы с mangalib и собрать файл для Kindle
+Exec=mangakindle
+Icon=mangakindle
+Terminal=true
+Categories=Utility;Viewer;
+Keywords=manga;kindle;manga;манга;киндл;
+StartupNotify=false
