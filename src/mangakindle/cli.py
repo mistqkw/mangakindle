@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import APP_NAME, __version__
 from .config import Settings
+from .deliver import usb
 from .pipeline import Cancelled, build
 from .source.local import LocalSource
 from .source.mangalib import MangaLib, parse_link
@@ -34,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     settings.direction = args.direction
     settings.spread = args.spread
     settings.trim = not args.no_trim
-    settings.per_chapter = not args.volume
+    settings.per_chapter = args.split
     settings.keep_cache = args.keep_cache
     settings.jpeg_quality = args.quality
     settings.delay = args.delay
@@ -81,8 +82,13 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
             print(f"Под «{wanted}» не подошла ни одна глава.", file=sys.stderr)
             return 2
 
-        print(f"Беру {len(selected)} гл., формат {settings.output_format}, "
-              f"направление {settings.direction}, разворот: {settings.spread}")
+        where = "на Kindle" if args.to == "kindle" else f"в {settings.output_dir}"
+        target = "по файлу на главу" if settings.per_chapter else "одним файлом"
+        print(f"Беру {len(selected)} гл. {target}, формат {settings.output_format}, "
+              f"направление {settings.direction}, разворот: {settings.spread}, {where}")
+        warning = _size_warning(selected, settings)
+        if warning:
+            print(warning)
 
         result = build(source, manga, selected, settings, on_progress=_progress)
 
@@ -91,6 +97,9 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
         size = path.stat().st_size / 1024 / 1024
         print(f"Готово: {path}  ({size:.1f} МБ)")
     print(f"Страниц всего: {result.pages}")
+
+    if args.to == "kindle":
+        _send_to_kindle(result.files, eject_after=args.eject)
     if result.skipped:
         print(f"Пропущено: {len(result.skipped)}")
         for line in result.skipped[:5]:
@@ -112,6 +121,11 @@ def _interactive() -> int:
         fmt = input("Формат — pdf для USB, epub для почты [pdf]: ").strip().lower()
         if fmt in ("pdf", "epub", "cbz"):
             argv += ["--format", fmt]
+        where = input("Куда — [1] сразу на Kindle, [2] в папку [1]: ").strip()
+        if where in ("", "1", "kindle"):
+            argv += ["--to", "kindle"]
+        if input("Каждую главу отдельным файлом? [нет/да]: ").strip().lower() in ("y", "д", "да"):
+            argv.append("--split")
         print()
         code = main(argv)
     except (EOFError, KeyboardInterrupt):
@@ -122,6 +136,44 @@ def _interactive() -> int:
     except (EOFError, KeyboardInterrupt):
         pass
     return code
+
+
+def _send_to_kindle(files: list[Path], eject_after: bool = False) -> None:
+    """Копирует готовые файлы на устройство. Ошибка доставки не отменяет сборку."""
+    sys.stdout.flush()
+    try:
+        kindle = usb.find_kindle()
+        if kindle is None:
+            raise usb.KindleError(
+                "Kindle не найден. Подключи его по USB и разбуди экран —\n"
+                "в спящем режиме он отключает режим накопителя."
+            )
+        print(f"\nKindle: {kindle.root}")
+        for path in files:
+            target = usb.send(path, kindle)
+            print(f"  скопировано: {target.name}")
+        if eject_after and usb.eject():
+            print("Устройство отмонтировано — можно отключать кабель.")
+        else:
+            print("Запись сброшена на диск — можно отключать кабель.")
+    except usb.KindleError as exc:
+        print(f"\n{exc}", file=sys.stderr)
+        print("Файлы остались в папке, отправишь позже.", file=sys.stderr)
+
+
+def _size_warning(selected: list[ChapterRef], settings: Settings) -> str:
+    """Грубая прикидка: ~40 страниц на главу, ~0.4 МБ на страницу."""
+    if settings.per_chapter or len(selected) < 20:
+        return ""
+    estimate = len(selected) * 40 * 0.4
+    if estimate < 500:
+        return ""
+    return (
+        f"Осторожно: {len(selected)} глав одним файлом — это примерно "
+        f"{estimate / 1024:.1f} ГБ.\n"
+        "Kindle такой файл откроет нескоро. Лучше взять диапазон поменьше "
+        "или добавить --split."
+    )
 
 
 def _progress(phase: str, done: int, total: int) -> None:
@@ -190,7 +242,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--local", help="папка или ZIP/CBZ с сохранёнными страницами")
     parser.add_argument("--chapters", help="all | 3 | 1-10 | 1,4,7-9")
     parser.add_argument("--list", action="store_true", help="показать список глав и выйти")
-    parser.add_argument("--volume", action="store_true", help="собрать всё в один файл")
+    parser.add_argument("--split", action="store_true",
+                        help="каждая глава отдельным файлом (по умолчанию — один файл на выбор)")
+    parser.add_argument("--to", choices=("folder", "kindle"), default="folder",
+                        help="folder — сохранить в папку, kindle — сразу на устройство по USB")
+    parser.add_argument("--eject", action="store_true",
+                        help="отмонтировать Kindle после копирования")
     parser.add_argument("--format", choices=("pdf", "epub", "cbz"), default="pdf",
                         help="pdf — для USB, epub — для отправки по почте")
     parser.add_argument("--direction", choices=("rtl", "ltr"), default="rtl")

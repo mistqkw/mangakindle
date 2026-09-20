@@ -62,3 +62,52 @@ def test_cbz_pages_are_ordered(tmp_path):
     path = builder.write(tmp_path / "out.cbz")
     with zipfile.ZipFile(path) as archive:
         assert archive.namelist() == ["0000.jpg", "0001.jpg", "0002.jpg"]
+
+
+class _FakeSource:
+    """Источник из двух глав по две страницы — чтобы не ходить в сеть."""
+
+    def pages(self, slug, chapter):
+        return [f"{chapter.number}-1", f"{chapter.number}-2"]
+
+    def download(self, url):
+        return _jpeg((400, 600))
+
+
+def _chapters():
+    from mangakindle.source.models import ChapterRef
+
+    return [ChapterRef(volume="1", number="1"), ChapterRef(volume="1", number="2")]
+
+
+def _settings(tmp_path, **extra):
+    from mangakindle.config import Settings
+
+    return Settings(output_dir=tmp_path, keep_cache=False, **extra)
+
+
+def test_selected_range_lands_in_one_file_with_bookmark_per_chapter(tmp_path, monkeypatch):
+    from mangakindle import pipeline
+    from mangakindle.source.models import MangaInfo
+
+    monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
+    manga = MangaInfo(slug="1--x", name="Бродяга")
+    result = pipeline.build(_FakeSource(), manga, _chapters(), _settings(tmp_path))
+
+    assert len(result.files) == 1
+    assert result.files[0].name == "Бродяга — гл1-2.pdf"
+    data = result.files[0].read_bytes()
+    assert b"/Type /Outlines /First" in data and b"/Count 2" in data
+
+
+def test_split_makes_a_file_per_chapter(tmp_path, monkeypatch):
+    from mangakindle import pipeline
+    from mangakindle.source.models import MangaInfo
+
+    monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
+    manga = MangaInfo(slug="1--x", name="Бродяга")
+    result = pipeline.build(
+        _FakeSource(), manga, _chapters(), _settings(tmp_path, per_chapter=True)
+    )
+
+    assert [f.name for f in result.files] == ["Бродяга — т1 гл1.pdf", "Бродяга — т1 гл2.pdf"]

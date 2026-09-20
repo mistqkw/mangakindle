@@ -41,7 +41,7 @@ class Settings:
     # вывод
     output_dir: Path = field(default_factory=default_output_dir)
     output_format: str = "pdf"          # pdf | epub | cbz
-    per_chapter: bool = True            # каждая глава отдельным файлом
+    per_chapter: bool = False           # True — каждая глава отдельным файлом
     keep_cache: bool = False
 
     # обработка страниц

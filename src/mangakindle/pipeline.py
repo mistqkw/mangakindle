@@ -83,6 +83,7 @@ def build(
                 continue
 
             progress(f"Скачиваю {chapter.label}", 0, len(urls))
+            first_page_of_chapter = True
             for index, url in enumerate(urls, start=1):
                 if cancelled():
                     raise Cancelled
@@ -93,7 +94,9 @@ def build(
                     continue
 
                 for image in prepare_page(data, options):
-                    title = chapter.label if page_number == 0 and index == 1 else ""
+                    # закладка и пункт оглавления — на первой странице каждой главы
+                    title = chapter.label if first_page_of_chapter else ""
+                    first_page_of_chapter = False
                     _add_page(builder, encode_jpeg(image, options.quality), image, title)
                     page_number += 1
                 progress(f"Скачиваю {chapter.label}", index, len(urls))
