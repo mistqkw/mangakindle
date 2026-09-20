@@ -228,7 +228,7 @@ def _save_token(value: str) -> int:
         print(
             "\nСайт не принял этот токен.\n"
             "Скорее всего скопировалось не то или сессия истекла.\n"
-            "Как взять свежий: mangakindle --token-help",
+            "Как взять свежий: y0mu --token-help",
             file=sys.stderr,
         )
         return 2
@@ -362,7 +362,7 @@ def _select(chapters: list[ChapterRef], spec: str) -> list[ChapterRef]:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="mangakindle",
+        prog="y0mu",
         description=f"{APP_NAME} {__version__} — манга с mangalib.me в файл для Kindle 11th gen",
     )
     parser.add_argument("url", nargs="?", help="ссылка на мангу или на главу")

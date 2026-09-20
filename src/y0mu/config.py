@@ -1,7 +1,7 @@
 """Настройки приложения и пути к данным.
 
-Конфиг лежит в ~/.config/mangakindle/config.toml (Linux) и
-%APPDATA%\\mangakindle\\config.toml (Windows). Пароли сюда не пишутся —
+Конфиг лежит в ~/.config/y0mu/config.toml (Linux) и
+%APPDATA%\\y0mu\\config.toml (Windows). Пароли сюда не пишутся —
 для них на этапе доставки будет keyring.
 """
 
@@ -13,7 +13,7 @@ import tomllib
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
-APP_DIR_NAME = "mangakindle"
+APP_DIR_NAME = "y0mu"
 
 
 def config_dir() -> Path:
@@ -33,7 +33,7 @@ def cache_dir() -> Path:
 
 
 def default_output_dir() -> Path:
-    return Path.home() / "MangaKindle"
+    return Path.home() / "y0mu"
 
 
 @dataclass
@@ -95,7 +95,7 @@ class Settings:
                 return str(v)
             return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
-        out = ["# MangaKindle — настройки. Пароль SMTP здесь не хранится.", "", "[output]"]
+        out = ["# y0mu — настройки. Пароль SMTP здесь не хранится.", "", "[output]"]
         for name in ("output_dir", "output_format", "per_chapter", "keep_cache", "cover"):
             out.append(f"{name} = {val(getattr(self, name))}")
         out += ["", "[pages]"]

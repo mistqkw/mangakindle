@@ -70,7 +70,7 @@ class PdfBuilder:
         )
         objects[2] = self._dict(f"/Type /Pages /Count {page_count} /Kids [{kids}]")
         objects[3] = self._dict(
-            f"/Producer {_pdf_text('MangaKindle')} /Title {_pdf_text(self.title)}"
+            f"/Producer {_pdf_text('y0mu')} /Title {_pdf_text(self.title)}"
         )
 
         for index, page in enumerate(self.pages):

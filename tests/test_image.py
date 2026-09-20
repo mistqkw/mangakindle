@@ -2,7 +2,7 @@ import io
 
 from PIL import Image
 
-from mangakindle.convert.image import (
+from y0mu.convert.image import (
     KINDLE_HEIGHT,
     KINDLE_WIDTH,
     PageOptions,

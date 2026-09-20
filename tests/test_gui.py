@@ -12,7 +12,7 @@ pytest.importorskip("PySide6.QtWidgets", reason="Qt не грузится в э�
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from mangakindle.source.models import ChapterRef, MangaInfo  # noqa: E402
+from y0mu.source.models import ChapterRef, MangaInfo  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -22,8 +22,8 @@ def app():
 
 @pytest.fixture
 def window(app, tmp_path, monkeypatch):
-    from mangakindle.config import Settings
-    from mangakindle.gui import window as window_module
+    from y0mu.config import Settings
+    from y0mu.gui import window as window_module
 
     monkeypatch.setattr(Settings, "load", classmethod(lambda cls: Settings(output_dir=tmp_path)))
     monkeypatch.setattr(Settings, "save", lambda self, path=None: tmp_path / "config.toml")

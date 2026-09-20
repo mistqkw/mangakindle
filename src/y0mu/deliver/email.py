@@ -18,7 +18,7 @@ from pathlib import Path
 
 from ..config import Settings
 
-SERVICE = "mangakindle-smtp"
+SERVICE = "y0mu-smtp"
 
 # Amazon держит лимит около 50 МБ, но обычная почта режет раньше:
 # у Gmail потолок 25 МБ на письмо. Берём с запасом.
@@ -60,12 +60,12 @@ def check_settings(settings: Settings) -> None:
     if missing:
         raise MailError(
             "Почта не настроена, не хватает: " + ", ".join(missing) + ".\n"
-            "Настроить: mangakindle --setup-email"
+            "Настроить: y0mu --setup-email"
         )
     if not load_password(settings.smtp_user):
         raise MailError(
             f"Нет пароля для {settings.smtp_user} в хранилище.\n"
-            "Настроить заново: mangakindle --setup-email"
+            "Настроить заново: y0mu --setup-email"
         )
 
 
@@ -119,7 +119,7 @@ def _message(path: Path, settings: Settings) -> EmailMessage:
     message["From"] = settings.smtp_user
     message["To"] = settings.kindle_email
     message["Subject"] = path.stem
-    message.set_content("Отправлено из MangaKindle.")
+    message.set_content("Отправлено из y0mu.")
 
     guessed = guess_type(path.name)[0] or "application/octet-stream"
     maintype, _, subtype = guessed.partition("/")

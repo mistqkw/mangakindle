@@ -53,7 +53,7 @@ jobs:
       - name: Собрать консольную версию
         run: >
           uv run pyinstaller --onefile --clean --noconfirm
-          --name mangakindle
+          --name y0mu
           --paths src
           --console
           packaging/cli_entry.py
@@ -62,7 +62,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: >
           uv run pyinstaller --onefile --clean --noconfirm
-          --name mangakindle-gui
+          --name y0mu-gui
           --paths src
           --windowed
           --add-data "assets/icons:assets/icons"
@@ -72,10 +72,10 @@ jobs:
         if: matrix.platform == 'windows'
         run: >
           uv run pyinstaller --onefile --clean --noconfirm
-          --name mangakindle-gui
+          --name y0mu-gui
           --paths src
           --windowed
-          --icon assets/icons/mangakindle.ico
+          --icon assets/icons/y0mu.ico
           --add-data "assets/icons;assets/icons"
           packaging/gui_entry.py
 
@@ -83,33 +83,33 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           mkdir -p package
-          cp dist/mangakindle dist/mangakindle-gui package/
+          cp dist/y0mu dist/y0mu-gui package/
           cp README.md package/
-          cp assets/mangakindle.desktop package/
-          cp assets/icons/mangakindle-256.png package/
-          tar -czf mangakindle-linux-x86_64.tar.gz -C package .
+          cp assets/y0mu.desktop package/
+          cp assets/icons/y0mu-256.png package/
+          tar -czf y0mu-linux-x86_64.tar.gz -C package .
 
       - name: Упаковать (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path package | Out-Null
-          Copy-Item dist/mangakindle.exe, dist/mangakindle-gui.exe, README.md -Destination package
-          Compress-Archive -Path package/* -DestinationPath mangakindle-windows-x86_64.zip
+          Copy-Item dist/y0mu.exe, dist/y0mu-gui.exe, README.md -Destination package
+          Compress-Archive -Path package/* -DestinationPath y0mu-windows-x86_64.zip
 
       - name: Выложить в релиз
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            mangakindle-linux-x86_64.tar.gz
-            mangakindle-windows-x86_64.zip
+            y0mu-linux-x86_64.tar.gz
+            y0mu-windows-x86_64.zip
           fail_on_unmatched_files: false
           generate_release_notes: true
           body: |
             Личный конвертер манги под Kindle 11th gen.
 
-            - `mangakindle` — командная строка
-            - `mangakindle-gui` — окно
+            - `y0mu` — командная строка
+            - `y0mu-gui` — окно
 
             Только для личного чтения. Раздачей файлов не занимаемся.

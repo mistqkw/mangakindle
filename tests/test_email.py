@@ -4,8 +4,8 @@ from contextlib import contextmanager
 
 import pytest
 
-from mangakindle.config import Settings
-from mangakindle.deliver import email
+from y0mu.config import Settings
+from y0mu.deliver import email
 
 
 class _FakeSmtp:

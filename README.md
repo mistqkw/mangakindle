@@ -1,4 +1,4 @@
-# MangaKindle
+# y0mu
 
 Берёт ссылку на мангу с mangalib.me, скачивает главы, режет развороты,
 приводит страницы под экран Kindle 11th gen (1072×1448, 300 ppi, серый)
@@ -15,10 +15,10 @@
 ## Окно
 
 ```bash
-mangakindle-gui
+y0mu-gui
 ```
 
-Или пункт «MangaKindle» в меню приложений. Одно окно: поле ссылки,
+Или пункт «y0mu» в меню приложений. Одно окно: поле ссылки,
 обложка и название, список глав с чекбоксами («Все», «Снять», диапазон
 вроде `1-3`), выбор формата, направления чтения и разворотов, выбор
 «сразу на Kindle» или «в папку».
@@ -31,8 +31,8 @@ mangakindle-gui
 Нужен [uv](https://docs.astral.sh/uv/). Python 3.13 он поставит сам.
 
 ```bash
-git clone <репозиторий> mangakindle
-cd mangakindle
+git clone <репозиторий> y0mu
+cd y0mu
 uv sync
 ```
 
@@ -41,48 +41,48 @@ uv sync
 Посмотреть список глав:
 
 ```bash
-uv run mangakindle "https://mangalib.me/ru/manga/1357--vagabond" --list
+uv run y0mu "https://mangalib.me/ru/manga/1357--vagabond" --list
 ```
 
 Выбранное всегда собирается **в один файл**: главы 1–3 — один PDF,
 `all` — весь тайтл одним PDF. Нужны отдельные файлы по главам — `--split`.
 
 ```bash
-mangakindle "https://mangalib.me/ru/manga/1357--vagabond" --chapters 1-3
+y0mu "https://mangalib.me/ru/manga/1357--vagabond" --chapters 1-3
 ```
 
 Сразу на устройство, без промежуточной возни с файлами:
 
 ```bash
-mangakindle "https://mangalib.me/ru/manga/1357--vagabond" --chapters 1-3 --to kindle
+y0mu "https://mangalib.me/ru/manga/1357--vagabond" --chapters 1-3 --to kindle
 ```
 
 Весь тайтл одним файлом в EPUB, по файлу на главу:
 
 ```bash
-mangakindle "https://mangalib.me/ru/manga/1357--vagabond" --chapters all --split --format epub
+y0mu "https://mangalib.me/ru/manga/1357--vagabond" --chapters all --split --format epub
 ```
 
 Если глава на сайте закрыта — сохрани страницы сам и собери из папки или архива:
 
 ```bash
-uv run mangakindle --local ~/Загрузки/глава_5 --chapters 1
+uv run y0mu --local ~/Загрузки/глава_5 --chapters 1
 ```
 
 ### Установка в систему (Linux)
 
-Команда `mangakindle` в PATH, пункт в меню приложений и иконка:
+Команда `y0mu` в PATH, пункт в меню приложений и иконка:
 
 ```bash
-uv tool install .          # команды mangakindle и mangakindle-gui
+uv tool install .          # команды y0mu и y0mu-gui
 uv run python assets/make_icon.py
-install -Dm644 assets/icons/mangakindle-48.png  ~/.local/share/icons/hicolor/48x48/apps/mangakindle.png
-install -Dm644 assets/icons/mangakindle-128.png ~/.local/share/icons/hicolor/128x128/apps/mangakindle.png
-install -Dm644 assets/icons/mangakindle-256.png ~/.local/share/icons/hicolor/256x256/apps/mangakindle.png
-install -Dm644 assets/icons/mangakindle.svg     ~/.local/share/icons/hicolor/scalable/apps/mangakindle.svg
-install -Dm644 assets/mangakindle.desktop       ~/.local/share/applications/mangakindle.desktop
+install -Dm644 assets/icons/y0mu-48.png  ~/.local/share/icons/hicolor/48x48/apps/y0mu.png
+install -Dm644 assets/icons/y0mu-128.png ~/.local/share/icons/hicolor/128x128/apps/y0mu.png
+install -Dm644 assets/icons/y0mu-256.png ~/.local/share/icons/hicolor/256x256/apps/y0mu.png
+install -Dm644 assets/icons/y0mu.svg     ~/.local/share/icons/hicolor/scalable/apps/y0mu.svg
+install -Dm644 assets/y0mu.desktop       ~/.local/share/applications/y0mu.desktop
 # абсолютный путь в Exec: графическая сессия часто не видит ~/.local/bin
-sed -i "s|^Exec=.*|Exec=$(command -v mangakindle-gui)|" ~/.local/share/applications/mangakindle.desktop
+sed -i "s|^Exec=.*|Exec=$(command -v y0mu-gui)|" ~/.local/share/applications/y0mu.desktop
 update-desktop-database ~/.local/share/applications
 gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
 ```
@@ -115,8 +115,8 @@ Amazon принимает письмо с вложением на адрес `..
 EPUB, а не PDF.
 
 ```bash
-mangakindle --setup-email     # адрес Kindle, SMTP, пароль приложения
-mangakindle "ссылка" --chapters 1-10 --to email
+y0mu --setup-email     # адрес Kindle, SMTP, пароль приложения
+y0mu "ссылка" --chapters 1-10 --to email
 ```
 
 В окне это пункт «Письмом на Kindle» и кнопка «Почта…».
@@ -139,7 +139,7 @@ mangakindle "ссылка" --chapters 1-10 --to email
 на 5.19.2, устройство индексирует файл, но полку оставляет пустой.
 
 ```bash
-mangakindle "ссылка" --chapters 1-3 --format azw3 --to kindle
+y0mu "ссылка" --chapters 1-3 --format azw3 --to kindle
 ```
 
 AZW3 собирается из нашего же EPUB через `ebook-convert` из calibre.
@@ -187,7 +187,7 @@ EPUB есть только в Send to Kindle, где файл конвертир
 1. Войти на сайте в браузере.
 2. F12 → вкладка Application → Local storage → адрес сайта.
 3. Строка с ключом `auth` → правой кнопкой по значению → Copy value.
-4. Выполнить `mangakindle --token` — он возьмёт скопированное из
+4. Выполнить `y0mu --token` — он возьмёт скопированное из
    буфера, сам достанет оттуда `access_token`, проверит на сайте
    и только потом сохранит.
 
@@ -196,10 +196,10 @@ EPUB есть только в Send to Kindle, где файл конвертир
 можно набрать руками: она просто печатает то же самое значение.
 
 ```bash
-mangakindle --token-help      # показать строку для консоли браузера
-mangakindle --token           # взять из буфера, проверить, сохранить
-mangakindle --token ТОКЕН     # то же самое, но вставить явно
-mangakindle --forget-token    # удалить
+y0mu --token-help      # показать строку для консоли браузера
+y0mu --token           # взять из буфера, проверить, сохранить
+y0mu --token ТОКЕН     # то же самое, но вставить явно
+y0mu --forget-token    # удалить
 ```
 
 В окне то же самое делает кнопка «Токен 18+»: там и строка для консоли,
@@ -235,9 +235,9 @@ mangakindle --forget-token    # удалить
 
 ## Где что лежит
 
-- настройки: `~/.config/mangakindle/config.toml`
-- кэш страниц: `~/.cache/mangakindle/` (чистится после сборки)
-- готовые файлы: `~/MangaKindle/`
+- настройки: `~/.config/y0mu/config.toml`
+- кэш страниц: `~/.cache/y0mu/` (чистится после сборки)
+- готовые файлы: `~/y0mu/`
 
 ## Сборка релиза
 
@@ -249,8 +249,8 @@ git tag v0.1.0 && git push origin v0.1.0
 ```
 
 Workflow прогоняет тесты, собирает через PyInstaller два бинарника
-на каждую платформу — `mangakindle` (командная строка, ~30 МБ) и
-`mangakindle-gui` (окно, ~100 МБ) — и вешает архивы на релиз.
+на каждую платформу — `y0mu` (командная строка, ~30 МБ) и
+`y0mu-gui` (окно, ~100 МБ) — и вешает архивы на релиз.
 Тесты на каждый push в main гоняет отдельный workflow.
 
 ## Тесты

@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         roots = [Path(getattr(sys, "_MEIPASS", "")), Path(__file__).resolve().parents[3]]
         for root in roots:
             for size in (256, 128, 48):
-                path = root / "assets" / "icons" / f"mangakindle-{size}.png"
+                path = root / "assets" / "icons" / f"y0mu-{size}.png"
                 if path.is_file():
                     self.setWindowIcon(QIcon(str(path)))
                     return

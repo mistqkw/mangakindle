@@ -2,7 +2,7 @@
 
 import sys
 
-from mangakindle.cli import main
+from y0mu.cli import main
 
 if __name__ == "__main__":
     sys.exit(main())

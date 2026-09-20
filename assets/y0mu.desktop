@@ -1,13 +1,13 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=MangaKindle
-GenericName=Конвертер манги для Kindle
+Name=y0mu
+GenericName=Манга на Kindle
 Comment=Скачать главы с mangalib и собрать файл для Kindle
-Exec=mangakindle-gui
-Icon=mangakindle
+Exec=y0mu-gui
+Icon=y0mu
 Terminal=false
 Categories=Utility;Viewer;
 Keywords=manga;kindle;манга;киндл;
 StartupNotify=true
-StartupWMClass=mangakindle-gui
+StartupWMClass=y0mu-gui

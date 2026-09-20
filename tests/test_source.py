@@ -3,10 +3,10 @@ import zipfile
 
 import pytest
 
-from mangakindle.cli import _select
-from mangakindle.source.local import LocalSource, _natural_key
-from mangakindle.source.mangalib import parse_link
-from mangakindle.source.models import ChapterRef, SourceError
+from y0mu.cli import _select
+from y0mu.source.local import LocalSource, _natural_key
+from y0mu.source.mangalib import parse_link
+from y0mu.source.models import ChapterRef, SourceError
 
 
 def test_parse_manga_link():

@@ -3,8 +3,8 @@
 import httpx
 import pytest
 
-from mangakindle.source.mangalib import API_HOSTS, MangaLib
-from mangakindle.source.models import SourceError
+from y0mu.source.mangalib import API_HOSTS, MangaLib
+from y0mu.source.models import SourceError
 
 DDOS_GUARD_HTML = "<!DOCTYPE html><title>Error 403</title><p>403 - Forbidden"
 
@@ -89,7 +89,7 @@ def test_empty_chapter_list_explains_licensing():
 
 
 def test_link_host_picks_the_section():
-    from mangakindle.source.mangalib import SITE_ADULT, SITE_MANGA, parse_link
+    from y0mu.source.mangalib import SITE_ADULT, SITE_MANGA, parse_link
 
     assert parse_link("https://hentailib.me/ru/manga/1--x").site_id == SITE_ADULT
     assert parse_link("https://mangalib.me/ru/manga/1--x").site_id == SITE_MANGA
@@ -121,7 +121,7 @@ def _hidden(request: httpx.Request) -> httpx.Response:
 
 
 def _chapter():
-    from mangakindle.source.models import ChapterRef
+    from y0mu.source.models import ChapterRef
 
     return ChapterRef(volume="1", number="1")
 
@@ -150,7 +150,7 @@ def test_ordinary_section_keeps_the_licensing_explanation():
 
 def test_age_label_and_section_are_reported_separately():
     """Метка 18+ и закрытый раздел — разные вещи, и это должно быть видно."""
-    from mangakindle.cli import _where
+    from y0mu.cli import _where
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -168,7 +168,7 @@ def test_age_label_and_section_are_reported_separately():
 
 def test_image_servers_are_picked_per_section():
     """Закрытый раздел отдаёт картинки со своего CDN, чужой молча вернёт пустоту."""
-    from mangakindle.source.mangalib import SITE_ADULT, SITE_MANGA
+    from y0mu.source.mangalib import SITE_ADULT, SITE_MANGA
 
     constants = {
         "data": {
@@ -198,7 +198,7 @@ def test_image_servers_are_picked_per_section():
 
 
 def test_referer_matches_the_section_domain():
-    from mangakindle.source.mangalib import SITE_ADULT
+    from y0mu.source.mangalib import SITE_ADULT
 
     with _client(lambda r: httpx.Response(200, json={"data": {}})) as source:
         assert source.referer() == "https://mangalib.me/"

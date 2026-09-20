@@ -2,10 +2,10 @@
 
 import pytest
 
-from mangakindle.config import Settings
-from mangakindle.deliver import usb
-from mangakindle.pipeline import _filename
-from mangakindle.source.models import ChapterRef, MangaInfo
+from y0mu.config import Settings
+from y0mu.deliver import usb
+from y0mu.pipeline import _filename
+from y0mu.source.models import ChapterRef, MangaInfo
 
 
 @pytest.fixture
@@ -75,7 +75,7 @@ def test_thumbnail_lands_where_kindle_looks_for_it(tmp_path, fake_kindle):
 
     from PIL import Image
 
-    from mangakindle.convert.image import KINDLE_HEIGHT, KINDLE_WIDTH
+    from y0mu.convert.image import KINDLE_HEIGHT, KINDLE_WIDTH
 
     (fake_kindle / "system" / "thumbnails").mkdir()
     buffer = io.BytesIO()
@@ -95,9 +95,9 @@ def test_thumbnail_is_skipped_when_device_has_no_such_folder(tmp_path, fake_kind
 def test_azw3_without_calibre_fails_before_downloading(tmp_path, monkeypatch):
     import pytest as _pytest
 
-    from mangakindle import pipeline
-    from mangakindle.convert import azw3
-    from mangakindle.source.models import MangaInfo, SourceError
+    from y0mu import pipeline
+    from y0mu.convert import azw3
+    from y0mu.source.models import MangaInfo, SourceError
 
     monkeypatch.setattr(azw3, "available", lambda: False)
 
@@ -111,14 +111,14 @@ def test_azw3_without_calibre_fails_before_downloading(tmp_path, monkeypatch):
 
 
 def _chapters():
-    from mangakindle.source.models import ChapterRef
+    from y0mu.source.models import ChapterRef
 
     return [ChapterRef(volume="1", number="1")]
 
 
 def test_token_can_be_pasted_as_whole_browser_value():
     """Из браузера проще скопировать весь ключ auth, чем выковыривать токен."""
-    from mangakindle.source import auth
+    from y0mu.source import auth
 
     whole = (
         '{"auth":{"id":42,"username":"mista"},'
@@ -131,14 +131,14 @@ def test_token_can_be_pasted_as_whole_browser_value():
 
 
 def test_anonymous_browser_value_says_you_are_not_logged_in():
-    from mangakindle.source import auth
+    from y0mu.source import auth
 
     with pytest.raises(auth.AuthError, match="выполнен вход"):
         auth.clean_token('{"prevUrl":"","timestamp":1789934118370}')
 
 
 def test_cyrillic_junk_is_rejected_before_it_reaches_http():
-    from mangakindle.source import auth
+    from y0mu.source import auth
 
     with pytest.raises(auth.AuthError, match="не похоже на токен"):
         auth.clean_token("это точно не токен")

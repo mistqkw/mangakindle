@@ -1,4 +1,4 @@
-"""Иконка MangaKindle: пиксельная страница манги с загнутым уголком.
+"""Иконка y0mu: пиксельная страница манги с загнутым уголком.
 
 Рисуется по сетке 16x16, масштабируется только целым числом и только
 методом NEAREST — ни размытия, ни градиентов. Запуск:
@@ -88,11 +88,11 @@ def main(target: str | None = None) -> int:
     out = Path(target or Path(__file__).parent / "icons")
     out.mkdir(parents=True, exist_ok=True)
     for size in SIZES:
-        scaled(size).save(out / f"mangakindle-{size}.png")
-    (out / "mangakindle.svg").write_text(svg(), encoding="utf-8")
+        scaled(size).save(out / f"y0mu-{size}.png")
+    (out / "y0mu.svg").write_text(svg(), encoding="utf-8")
     # .ico для Windows-сборки
     scaled(256).save(
-        out / "mangakindle.ico",
+        out / "y0mu.ico",
         format="ICO",
         sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
     )

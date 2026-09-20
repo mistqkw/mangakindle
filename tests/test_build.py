@@ -3,9 +3,9 @@ import zipfile
 
 from PIL import Image
 
-from mangakindle.convert.cbz import CbzBuilder
-from mangakindle.convert.epub import EpubBuilder
-from mangakindle.convert.pdf import PdfBuilder
+from y0mu.convert.cbz import CbzBuilder
+from y0mu.convert.epub import EpubBuilder
+from y0mu.convert.pdf import PdfBuilder
 
 
 def _jpeg(size=(1072, 1448)) -> bytes:
@@ -75,20 +75,20 @@ class _FakeSource:
 
 
 def _chapters():
-    from mangakindle.source.models import ChapterRef
+    from y0mu.source.models import ChapterRef
 
     return [ChapterRef(volume="1", number="1"), ChapterRef(volume="1", number="2")]
 
 
 def _settings(tmp_path, **extra):
-    from mangakindle.config import Settings
+    from y0mu.config import Settings
 
     return Settings(output_dir=tmp_path, keep_cache=False, **extra)
 
 
 def test_selected_range_lands_in_one_file_with_bookmark_per_chapter(tmp_path, monkeypatch):
-    from mangakindle import pipeline
-    from mangakindle.source.models import MangaInfo
+    from y0mu import pipeline
+    from y0mu.source.models import MangaInfo
 
     monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
     manga = MangaInfo(slug="1--x", name="Бродяга")
@@ -101,8 +101,8 @@ def test_selected_range_lands_in_one_file_with_bookmark_per_chapter(tmp_path, mo
 
 
 def test_split_makes_a_file_per_chapter(tmp_path, monkeypatch):
-    from mangakindle import pipeline
-    from mangakindle.source.models import MangaInfo
+    from y0mu import pipeline
+    from y0mu.source.models import MangaInfo
 
     monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
     manga = MangaInfo(slug="1--x", name="Бродяга")
@@ -114,8 +114,8 @@ def test_split_makes_a_file_per_chapter(tmp_path, monkeypatch):
 
 
 def test_cover_from_site_becomes_the_first_page(tmp_path, monkeypatch):
-    from mangakindle import pipeline
-    from mangakindle.source.models import MangaInfo
+    from y0mu import pipeline
+    from y0mu.source.models import MangaInfo
 
     monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
     manga = MangaInfo(slug="1--x", name="Бродяга", cover_url="https://example/cover.jpg")
@@ -139,8 +139,8 @@ def _titles_hex(path) -> str:
 
 
 def test_missing_cover_does_not_break_the_build(tmp_path, monkeypatch):
-    from mangakindle import pipeline
-    from mangakindle.source.models import MangaInfo
+    from y0mu import pipeline
+    from y0mu.source.models import MangaInfo
 
     monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
 
@@ -156,8 +156,8 @@ def test_missing_cover_does_not_break_the_build(tmp_path, monkeypatch):
 
 
 def test_big_volume_is_split_into_parts_for_email(tmp_path, monkeypatch):
-    from mangakindle import pipeline
-    from mangakindle.source.models import MangaInfo
+    from y0mu import pipeline
+    from y0mu.source.models import MangaInfo
 
     monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
     manga = MangaInfo(slug="1--x", name="Бродяга")
@@ -176,8 +176,8 @@ def test_big_volume_is_split_into_parts_for_email(tmp_path, monkeypatch):
 
 
 def test_single_part_keeps_the_plain_name(tmp_path, monkeypatch):
-    from mangakindle import pipeline
-    from mangakindle.source.models import MangaInfo
+    from y0mu import pipeline
+    from y0mu.source.models import MangaInfo
 
     monkeypatch.setattr(pipeline, "cache_dir", lambda: tmp_path / "cache")
     settings = _settings(tmp_path, max_part_bytes=50 * 1024 * 1024)

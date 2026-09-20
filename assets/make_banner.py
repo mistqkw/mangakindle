@@ -145,10 +145,16 @@ def banner(width: int = 1280, height: int = 640) -> Image.Image:
     draw.rectangle(box, fill=SURFACE, outline=BORDER, width=4)
 
     # заголовок по центру
-    title_font = pixel_font(44)
-    title = "MangaKindle"
-    draw.text(((width - draw.textlength(title, font=title_font)) // 2, 96),
+    # имя короткое, поэтому кегль крупнее, а под ним поясняющая строка
+    title_font = pixel_font(72)
+    title = "y0mu"
+    draw.text(((width - draw.textlength(title, font=title_font)) // 2, 84),
               title, font=title_font, fill=ACCENT)
+
+    sub_font = body_font(26)
+    sub = "манга на Kindle"
+    draw.text(((width - draw.textlength(sub, font=sub_font)) // 2, 176),
+              sub, font=sub_font, fill=MUTED)
 
     # ряд-история: страница -> стрелка -> Kindle
     page = _icon_symbol(14)          # 16*14 = 224
@@ -157,7 +163,7 @@ def banner(width: int = 1280, height: int = 640) -> Image.Image:
     gap = 56
     row_width = page.width + gap + tip.width + gap + device.width
     x = (width - row_width) // 2
-    row_top = 214
+    row_top = 238
     row_height = max(page.height, device.height)
 
     image.paste(page, (x, row_top + (row_height - page.height) // 2), page)
@@ -167,7 +173,7 @@ def banner(width: int = 1280, height: int = 640) -> Image.Image:
     image.paste(device, (x, row_top + (row_height - device.height) // 2))
 
     # подписи
-    tagline = "манга с mangalib.me — прямо на Kindle"
+    tagline = "ссылка с mangalib — готовый файл на устройстве"
     tag_font = body_font(30)
     draw.text(((width - draw.textlength(tagline, font=tag_font)) // 2, 468),
               tagline, font=tag_font, fill=TEXT)
@@ -177,7 +183,7 @@ def banner(width: int = 1280, height: int = 640) -> Image.Image:
     draw.text(((width - draw.textlength(formats, font=fmt_font)) // 2, 512),
               formats, font=fmt_font, fill=PAPER)
 
-    link = "github.com/mistqkw/mangakindle"
+    link = "github.com/mistqkw/y0mu"
     link_font = body_font(22)
     draw.text(((width - draw.textlength(link, font=link_font)) // 2, 552),
               link, font=link_font, fill=MUTED)
