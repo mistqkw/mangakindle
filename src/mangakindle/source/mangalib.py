@@ -16,7 +16,9 @@ import httpx
 from .. import USER_AGENT
 from .models import ChapterRef, MangaInfo, SourceError
 
-API_BASE = "https://api.cdnlibs.org/api"
+# Один и тот же API живёт на двух хостах, и любой из них может начать
+# отвечать 403 целиком, независимо от тайтла. Поэтому ходим по списку.
+API_HOSTS = ("https://api2.mangalib.me/api", "https://api.cdnlibs.org/api")
 SITE_ID = "1"  # 1 = MangaLib
 REFERER = "https://mangalib.me/"
 FALLBACK_IMAGE_SERVERS = ("https://img2.imglib.info", "https://img3.cdnlibs.org")
@@ -57,12 +59,19 @@ def parse_link(url: str) -> LinkTarget:
 class MangaLib:
     """Клиент API. Держит паузу между запросами и не ходит в несколько потоков."""
 
-    def __init__(self, delay: float = 0.7, timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        delay: float = 0.7,
+        timeout: float = 30.0,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         self.delay = delay
         self._last_request = 0.0
         self._image_servers: list[str] | None = None
+        self._host = API_HOSTS[0]
         self._client = httpx.Client(
             timeout=timeout,
+            transport=transport,
             follow_redirects=True,
             headers={
                 "User-Agent": USER_AGENT,
@@ -89,28 +98,64 @@ class MangaLib:
         self._last_request = time.monotonic()
 
     def _get(self, path: str, **params: object) -> dict:
-        self._throttle()
-        try:
-            response = self._client.get(f"{API_BASE}/{path}", params=params)
-        except httpx.HTTPError as exc:
-            raise SourceError(f"Нет связи с mangalib: {exc}") from exc
+        """Запрос к API с переходом на запасной хост, если текущий отказал."""
+        hosts = self._hosts()
+        refusals: list[str] = []
+        for index, host in enumerate(hosts):
+            self._throttle()
+            outcome = self._try_get(host, path, params)
+            if isinstance(outcome, dict):
+                self._host = host
+                return outcome
+            refusals.append(f"{_host_name(host)}: {outcome}")
+            if index < len(hosts) - 1:
+                continue
+        raise SourceError(
+            "Mangalib не отвечает ни на одном из своих адресов:\n  "
+            + "\n  ".join(refusals)
+            + "\n\nЭто отказ всего API, а не запрет на конкретный тайтл.\n"
+            "Обычно проходит само через несколько минут. Если спешишь —\n"
+            "сохрани страницы из браузера и собери файл через --local."
+        )
 
-        if response.status_code in (401, 403):
-            raise SourceError(
-                "Mangalib требует вход для этого тайтла (18+ или закрытая глава).\n"
-                "Обходить защиту приложение не будет — сохрани страницы вручную\n"
-                "и открой папку через --local."
-            )
-        if response.status_code == 404:
-            raise SourceError("Страница не найдена: проверь ссылку или номер главы.")
-        if response.status_code == 429:
-            raise SourceError("Слишком много запросов. Подожди минуту и повтори.")
-        if response.status_code >= 400:
-            raise SourceError(f"Mangalib ответил {response.status_code}.")
+    def _try_get(self, host: str, path: str, params: dict) -> dict | str:
+        """Возвращает данные или короткую причину, по которой хост не годится."""
         try:
-            return response.json()
-        except ValueError as exc:
-            raise SourceError("Mangalib вернул не JSON — возможно, сайт лежит.") from exc
+            response = self._client.get(f"{host}/{path}", params=params)
+        except httpx.HTTPError as exc:
+            return f"нет связи ({exc.__class__.__name__})"
+
+        payload = _json_or_none(response)
+        toast = _toast(payload)
+        status = response.status_code
+
+        if status == 401:
+            raise SourceError(
+                "Mangalib требует вход для этого тайтла — обычно это 18+.\n"
+                "Логин и капчу приложение не обходит: сохрани страницы\n"
+                "из браузера и собери файл через --local."
+            )
+        if status == 404:
+            raise SourceError("Страница не найдена: проверь ссылку или номер главы.")
+        if status == 429:
+            raise SourceError("Слишком много запросов. Подожди минуту и повтори.")
+        if status == 403:
+            # Если отказ пришёл от самого API — показываем его формулировку.
+            # Если это HTML от ddos-guard, дело в хосте, а не в тайтле.
+            if toast:
+                raise SourceError(f"Mangalib отказал: {toast}")
+            return "403, отказ на уровне сайта"
+        if status >= 500:
+            return f"сервер вернул {status}"
+        if status >= 400:
+            raise SourceError(toast or f"Mangalib ответил {status}.")
+        if payload is None:
+            return "ответ не в формате JSON"
+        return payload
+
+    def _hosts(self) -> list[str]:
+        """Рабочий хост первым, остальные — как запасные."""
+        return [self._host] + [h for h in API_HOSTS if h != self._host]
 
     # --- данные ---------------------------------------------------------
 
@@ -210,3 +255,30 @@ class MangaLib:
                 return response.content
             last_error = f"HTTP {response.status_code}"
         raise SourceError(f"Не получилось скачать страницу ({last_error}).")
+
+
+def _json_or_none(response: httpx.Response) -> dict | None:
+    if "json" not in response.headers.get("content-type", ""):
+        return None
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _toast(payload: dict | None) -> str:
+    """Свой текст ошибки mangalib отдаёт в data.toast.message."""
+    if not payload:
+        return ""
+    data = payload.get("data")
+    if isinstance(data, dict):
+        toast = data.get("toast")
+        if isinstance(toast, dict) and toast.get("message"):
+            return str(toast["message"])
+    message = payload.get("message")
+    return str(message) if message else ""
+
+
+def _host_name(host: str) -> str:
+    return host.split("//", 1)[-1].split("/", 1)[0]
