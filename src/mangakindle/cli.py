@@ -1,0 +1,175 @@
+"""Командная строка: ссылка -> файл для Kindle.
+
+GUI появится на этапе 2 и будет дёргать те же функции, что и этот модуль.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from . import APP_NAME, __version__
+from .config import Settings
+from .pipeline import Cancelled, build
+from .source.local import LocalSource
+from .source.mangalib import MangaLib, parse_link
+from .source.models import ChapterRef, SourceError
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    if not args.url and not args.local:
+        parser.error("нужна ссылка на mangalib или --local с папкой/архивом")
+
+    settings = Settings.load()
+    if args.out:
+        settings.output_dir = Path(args.out).expanduser()
+    settings.output_format = args.format
+    settings.direction = args.direction
+    settings.spread = args.spread
+    settings.trim = not args.no_trim
+    settings.per_chapter = not args.volume
+    settings.keep_cache = args.keep_cache
+    settings.jpeg_quality = args.quality
+    settings.delay = args.delay
+
+    try:
+        return _run(args, settings)
+    except Cancelled:
+        print("\nОтменено.")
+        return 130
+    except KeyboardInterrupt:
+        print("\nОтменено.")
+        return 130
+    except SourceError as exc:
+        print(f"\n{exc}", file=sys.stderr)
+        return 2
+
+
+def _run(args: argparse.Namespace, settings: Settings) -> int:
+    wanted: str | None = args.chapters
+
+    if args.local:
+        source = LocalSource(args.local)
+        manga = source.manga()
+        chapters = source.chapters()
+    else:
+        target = parse_link(args.url)
+        source = MangaLib(delay=settings.delay)
+        manga = source.manga(target.slug)
+        chapters = source.chapters(target.slug)
+        if target.is_chapter and not wanted:
+            wanted = target.number
+
+    with source:
+        print(f"{manga.title} — глав доступно: {len(chapters)}")
+
+        if args.list or not wanted:
+            _print_chapters(chapters)
+            if not args.list:
+                print("\nВыбери главы: --chapters 1-3  |  --chapters 1,5,7  |  --chapters all")
+            return 0
+
+        selected = _select(chapters, wanted)
+        if not selected:
+            print(f"Под «{wanted}» не подошла ни одна глава.", file=sys.stderr)
+            return 2
+
+        print(f"Беру {len(selected)} гл., формат {settings.output_format}, "
+              f"направление {settings.direction}, разворот: {settings.spread}")
+
+        result = build(source, manga, selected, settings, on_progress=_progress)
+
+    print()
+    for path in result.files:
+        size = path.stat().st_size / 1024 / 1024
+        print(f"Готово: {path}  ({size:.1f} МБ)")
+    print(f"Страниц всего: {result.pages}")
+    if result.skipped:
+        print(f"Пропущено: {len(result.skipped)}")
+        for line in result.skipped[:5]:
+            print(f"  · {line}")
+    return 0
+
+
+def _progress(phase: str, done: int, total: int) -> None:
+    bar = ""
+    if total:
+        filled = int(20 * done / total)
+        bar = "[" + "#" * filled + "." * (20 - filled) + f"] {done}/{total}"
+    sys.stdout.write(f"\r{phase} {bar}   ")
+    sys.stdout.flush()
+
+
+def _print_chapters(chapters: list[ChapterRef], limit: int = 40) -> None:
+    for chapter in chapters[:limit]:
+        print(f"  {chapter.label}")
+    if len(chapters) > limit:
+        print(f"  ... и ещё {len(chapters) - limit}")
+
+
+def _select(chapters: list[ChapterRef], spec: str) -> list[ChapterRef]:
+    """Отбор глав по номеру: all | 3 | 1-10 | 1,4,7-9"""
+    spec = spec.strip().lower()
+    if spec in ("all", "все", "*"):
+        return list(chapters)
+
+    def number(chapter: ChapterRef) -> float:
+        try:
+            return float(chapter.number)
+        except ValueError:
+            return -1.0
+
+    selected: list[ChapterRef] = []
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part[1:]:
+            low, _, high = part.partition("-")
+            try:
+                start, end = float(low), float(high)
+            except ValueError:
+                raise SourceError(f"Не понял диапазон «{part}».") from None
+            selected += [c for c in chapters if start <= number(c) <= end]
+        else:
+            try:
+                value = float(part)
+            except ValueError:
+                raise SourceError(f"Не понял номер главы «{part}».") from None
+            selected += [c for c in chapters if number(c) == value]
+
+    seen: set[tuple[str, str]] = set()
+    unique = []
+    for chapter in selected:
+        key = (chapter.volume, chapter.number)
+        if key not in seen:
+            seen.add(key)
+            unique.append(chapter)
+    return unique
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="mangakindle",
+        description=f"{APP_NAME} {__version__} — манга с mangalib.me в файл для Kindle 11th gen",
+    )
+    parser.add_argument("url", nargs="?", help="ссылка на мангу или на главу")
+    parser.add_argument("--local", help="папка или ZIP/CBZ с сохранёнными страницами")
+    parser.add_argument("--chapters", help="all | 3 | 1-10 | 1,4,7-9")
+    parser.add_argument("--list", action="store_true", help="показать список глав и выйти")
+    parser.add_argument("--volume", action="store_true", help="собрать всё в один файл")
+    parser.add_argument("--format", choices=("pdf", "epub", "cbz"), default="pdf",
+                        help="pdf — для USB, epub — для отправки по почте")
+    parser.add_argument("--direction", choices=("rtl", "ltr"), default="rtl")
+    parser.add_argument("--spread", choices=("split", "rotate", "keep"), default="split")
+    parser.add_argument("--no-trim", action="store_true", help="не обрезать поля")
+    parser.add_argument("--out", help="папка для готовых файлов")
+    parser.add_argument("--keep-cache", action="store_true", help="не удалять скачанные страницы")
+    parser.add_argument("--quality", type=int, default=85, help="качество JPEG, по умолчанию 85")
+    parser.add_argument("--delay", type=float, default=0.7, help="пауза между запросами, сек")
+    parser.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
+    return parser
