@@ -1,6 +1,6 @@
 [project]
 name = "y0mu"
-version = "0.1.0"
+version = "0.2.0"
 description = "Конвертер манги с mangalib.me под Kindle 11th gen"
 requires-python = ">=3.13,<3.14"
 dependencies = [
