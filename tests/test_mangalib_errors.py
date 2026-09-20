@@ -164,3 +164,59 @@ def test_age_label_and_section_are_reported_separately():
 
     assert info.age == "18+" and info.site == 1
     assert _where(info) == " (18+, mangalib)"
+
+
+def test_image_servers_are_picked_per_section():
+    """Закрытый раздел отдаёт картинки со своего CDN, чужой молча вернёт пустоту."""
+    from mangakindle.source.mangalib import SITE_ADULT, SITE_MANGA
+
+    constants = {
+        "data": {
+            "imageServers": [
+                {"id": "main", "site_ids": [1, 3], "url": "https://img2.imglib.info"},
+                {"id": "compress", "site_ids": [1, 3], "url": "https://img3.cdnlibs.org"},
+                {"id": "main", "site_ids": [4], "url": "https://img2h.hentaicdn.org"},
+                {"id": "compress", "site_ids": [4], "url": "https://img3h.hentaicdn.org"},
+            ]
+        }
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=constants)
+
+    with _client(handler) as source:
+        source.site_id = SITE_MANGA
+        assert source.image_servers() == [
+            "https://img2.imglib.info",
+            "https://img3.cdnlibs.org",
+        ]
+        source.site_id = SITE_ADULT
+        assert source.image_servers() == [
+            "https://img2h.hentaicdn.org",
+            "https://img3h.hentaicdn.org",
+        ]
+
+
+def test_referer_matches_the_section_domain():
+    from mangakindle.source.mangalib import SITE_ADULT
+
+    with _client(lambda r: httpx.Response(200, json={"data": {}})) as source:
+        assert source.referer() == "https://mangalib.me/"
+        source.site_id = SITE_ADULT
+        assert source.referer() == "https://hentailib.me/"
+
+
+def test_empty_body_is_not_reported_as_http_200():
+    """Чужой сервер отвечает 200 с пустым телом — сообщение должно это объяснять."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "constants" in request.url.path:
+            return httpx.Response(200, json={"data": {"imageServers": []}})
+        return httpx.Response(200, content=b"")
+
+    with _client(handler) as source:
+        with pytest.raises(SourceError) as error:
+            source.download("https://img2.imglib.info/manga/x/1.jpg")
+
+    message = str(error.value)
+    assert "пустой ответ" in message
+    assert "HTTP 200" not in message

@@ -39,8 +39,20 @@ SITE_BY_HOST = {
     "hentailib.org": SITE_ADULT,
     "yaoilib.me": SITE_ADULT,
 }
-REFERER = "https://mangalib.me/"
-FALLBACK_IMAGE_SERVERS = ("https://img2.imglib.info", "https://img3.cdnlibs.org")
+# У каждого раздела свой домен и свои серверы картинок: закрытый раздел
+# отдаёт страницы только с hentaicdn, а на imglib молча вернёт пустоту.
+SITE_DOMAINS = {
+    SITE_MANGA: "mangalib.me",
+    2: "slashlib.me",
+    SITE_RANOBE: "ranobelib.me",
+    SITE_ADULT: "hentailib.me",
+    5: "anilib.me",
+}
+FALLBACK_IMAGE_SERVERS = {
+    SITE_ADULT: ("https://img2h.hentaicdn.org", "https://img3h.hentaicdn.org"),
+    2: ("https://img2.hentaicdn.org", "https://img3.hentaicdn.org"),
+}
+DEFAULT_IMAGE_SERVERS = ("https://img2.imglib.info", "https://img3.cdnlibs.org")
 
 # 1357--vagabond в любом месте ссылки
 SLUG_RE = re.compile(r"(\d+--[A-Za-z0-9\-_]+)")
@@ -103,7 +115,7 @@ class MangaLib:
         self.site_id = site_id or SITE_MANGA
         self._site_known = site_id is not None
         self._last_request = 0.0
-        self._image_servers: list[str] | None = None
+        self._image_servers: dict[int, list[str]] = {}
         self._host = API_HOSTS[0]
         self._client = httpx.Client(
             timeout=timeout,
@@ -263,20 +275,26 @@ class MangaLib:
         return chapters
 
     def image_servers(self) -> list[str]:
-        if self._image_servers is None:
+        """Серверы картинок текущего раздела — у каждого они свои."""
+        site = self.site_id
+        if site not in self._image_servers:
             servers: list[str] = []
             try:
                 data = self._get("constants", **{"fields[]": "imageServers"}).get("data", {})
                 for server in data.get("imageServers", []):
-                    if 1 in (server.get("site_ids") or []) and server.get("id") in (
-                        "main",
-                        "compress",
-                    ):
-                        servers.append(server["url"].rstrip("/"))
+                    url = (server.get("url") or "").rstrip("/")
+                    if not url or server.get("id") not in ("main", "compress"):
+                        continue
+                    if site in (server.get("site_ids") or []) and url not in servers:
+                        servers.append(url)
             except SourceError:
                 servers = []
-            self._image_servers = servers or list(FALLBACK_IMAGE_SERVERS)
-        return self._image_servers
+            fallback = FALLBACK_IMAGE_SERVERS.get(site, DEFAULT_IMAGE_SERVERS)
+            self._image_servers[site] = servers or list(fallback)
+        return self._image_servers[site]
+
+    def referer(self) -> str:
+        return f"https://{SITE_DOMAINS.get(self.site_id, SITE_DOMAINS[SITE_MANGA])}/"
 
     def pages(self, slug: str, chapter: ChapterRef) -> list[str]:
         """Полные URL страниц главы в порядке чтения."""
@@ -339,14 +357,18 @@ class MangaLib:
             try:
                 response = self._client.get(
                     candidate,
-                    headers={"Referer": REFERER, "Accept": "image/*"},
+                    headers={"Referer": self.referer(), "Accept": "image/*"},
                 )
             except httpx.HTTPError as exc:
                 last_error = str(exc)
                 continue
             if response.status_code == 200 and response.content:
                 return response.content
-            last_error = f"HTTP {response.status_code}"
+            if response.status_code == 200:
+                # так отвечает чужой раздел: страница есть, а тела нет
+                last_error = f"{_host_name(candidate)} вернул пустой ответ"
+            else:
+                last_error = f"{_host_name(candidate)}: HTTP {response.status_code}"
         raise SourceError(f"Не получилось скачать страницу ({last_error}).")
 
 
